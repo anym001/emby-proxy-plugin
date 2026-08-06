@@ -46,7 +46,7 @@ CI is two workflows plus Dependabot:
   Nothing else is a dependency: the Emby assemblies come from the .deb, not from NuGet.
 
 **Actions are pinned to commit SHAs**, with the version as a trailing comment
-(`actions/checkout@11d5960… # v4.4.0`). Never reintroduce a floating `@v4` — a tag can be moved,
+(`actions/checkout@3d3c42e5… # v7.0.1`). Never reintroduce a floating major tag — it can be moved,
 a SHA cannot, and Dependabot is what keeps the pins current. `build.yml` lints the workflows with
 actionlint before it builds; run it locally before pushing a workflow change.
 
