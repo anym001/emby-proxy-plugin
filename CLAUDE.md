@@ -126,3 +126,11 @@ key by key.
 ## Git
 
 Work on the branch specified for the task. Do not open a pull request unless explicitly asked.
+
+The repository is **`main`-only** — no `dev` branch, unlike `pocketlog`/`healthlog`. Those use `dev`
+to publish a `:dev` image that a staging instance pulls; the deliverable here is a DLL copied into
+`/config/plugins`, so a `dev` branch would carry no artifact and gate nothing. Do not add one, and do
+not point Dependabot at a `target-branch`.
+
+`CONTRIBUTING.md` is the contributor-facing subset of this file. When a convention here changes and
+it affects someone sending a pull request, change it there too.

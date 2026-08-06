@@ -362,9 +362,12 @@ disagree.
 ## Project layout
 
 ```
-.github/workflows/build.yml         Build + patch-target check (pull requests, manual)
+.github/workflows/build.yml         actionlint + build + patch-target check (pull requests, manual)
 .github/workflows/release-check.yml Finds newer Emby releases, dispatches a build
 .github/dependabot.yml              Updates for the workflow actions and Lib.Harmony
+.github/ISSUE_TEMPLATE/             Bug report, feature request, private security link
+.github/PULL_REQUEST_TEMPLATE.md    Checklist covering the traps in CONTRIBUTING.md
+CONTRIBUTING.md                     How to build, verify and submit a change
 build/emby-version.txt              The pinned Emby version (single source of truth)
 build/fetch-emby-refs.sh            Fetches the Emby assemblies
 build/verify-patch-target.sh        Asserts the patched method still matches
