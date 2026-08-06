@@ -152,7 +152,7 @@ The script reports which part changed — the type, the method, or its return ty
 
 ### Continuous integration
 
-Two workflows, with different jobs.
+Two workflows with different jobs, plus Dependabot.
 
 **`build.yml`** does the same steps as a local build on a runner, then verifies the patch target and
 that the output is still a single self-contained DLL — no `0Harmony.dll` next to it, not suspiciously
@@ -187,6 +187,13 @@ that goes unnoticed otherwise, because a non-matching Harmony patch fails silent
 Both workflows are `workflow_dispatch`; GitHub only offers the *Run workflow* button for workflows
 present on the default branch, so manual runs work once they are on `main`. `release-check.yml` has a
 weekly `schedule` prepared but commented out.
+
+**Dependabot** (`.github/dependabot.yml`) covers the two dependency surfaces this repository actually
+has. The workflow actions are grouped into a single monthly pull request — they move together, and
+GitHub already reports that the `v4` actions target the deprecated Node 20 runtime. `Lib.Harmony`,
+the only NuGet dependency, gets its own. Both go through `build.yml` like any other change, which
+matters most for Harmony: it is embedded into the plugin DLL and patches the CLR at runtime, so a
+bump is verified by the patch-target check before it is taken rather than after.
 
 ---
 
@@ -351,6 +358,7 @@ disagree.
 ```
 .github/workflows/build.yml         Build + patch-target check (pull requests, manual)
 .github/workflows/release-check.yml Finds newer Emby releases, dispatches a build
+.github/dependabot.yml              Updates for the workflow actions and Lib.Harmony
 build/emby-version.txt              The pinned Emby version (single source of truth)
 build/fetch-emby-refs.sh            Fetches the Emby assemblies
 build/verify-patch-target.sh        Asserts the patched method still matches

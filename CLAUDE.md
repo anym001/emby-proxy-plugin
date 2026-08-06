@@ -34,7 +34,7 @@ them, and never commit build output.
 **The pinned Emby version lives in `build/emby-version.txt` and nowhere else.** The fetch script and
 both workflows read it. Do not reintroduce a literal default alongside it.
 
-CI is two workflows:
+CI is two workflows plus Dependabot:
 
 * `build.yml` — pull requests against `main` plus manual dispatch with an optional `emby-version`
   input. `inputs.*` is empty on `pull_request`, which is why the version is resolved in a step rather
@@ -42,6 +42,8 @@ CI is two workflows:
 * `release-check.yml` — finds Emby releases newer than the pinned version and dispatches `build.yml`
   against them. Emby publishes stable (`4.9.x`) and beta (`4.10.0.x`) in parallel, so selection is by
   the `prerelease` flag, never by version order.
+* `.github/dependabot.yml` — grouped monthly updates for the workflow actions, and `Lib.Harmony`.
+  Nothing else is a dependency: the Emby assemblies come from the .deb, not from NuGet.
 
 **Do not name build artifacts after `github.sha`.** On `pull_request` that is the ephemeral merge
 commit, which belongs to no branch and cannot be resolved after the run. Use
