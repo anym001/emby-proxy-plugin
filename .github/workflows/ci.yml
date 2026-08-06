@@ -153,3 +153,94 @@ jobs:
           name: EmbyProxyRouter-emby${{ steps.ctx.outputs.version }}-${{ steps.ctx.outputs.short_sha }}
           path: src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll
           if-no-files-found: error
+
+  # release-check.yml dispatches this workflow with a candidate Emby version;
+  # a human typing one into "Run workflow" does the same. Either way the run
+  # exists to decide whether that version can be adopted, so surface the
+  # decision instead of leaving it sitting in an Actions log that only the
+  # person who happened to dispatch it will ever open.
+  report-candidate:
+    needs: verify
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.emby-version != ''
+    runs-on: ubuntu-latest
+    # Elevated beyond the workflow's default contents:read - safe only because
+    # this job never runs on pull_request, so a fork can never reach it.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Adopting a version is still a human decision - release.yml deliberately
+      # takes no version input, for the reason explained there - so this
+      # proposes the bump rather than merging it. Skips quietly if the version
+      # is already pinned or a branch for it already exists, so a check
+      # repeated daily from a cron doesn't pile up duplicate PRs.
+      - name: Propose adopting the version
+        if: needs.verify.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.emby-version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          pinned="$(tr -d '[:space:]' < build/emby-version.txt)"
+          if [ "$pinned" = "$VERSION" ]; then
+            echo "Already pinned to $VERSION - nothing to propose."
+            exit 0
+          fi
+
+          branch="bump-emby-$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "Branch $branch already exists - a proposal is presumably already open."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          printf '%s' "$VERSION" > build/emby-version.txt
+          git commit -am "build: adopt Emby Server $VERSION"
+          git push origin "$branch"
+
+          gh pr create \
+            --title "build: adopt Emby Server $VERSION" \
+            --body "$(cat <<EOF
+          \`ci.yml\` verified the patch target against Emby Server **$VERSION** and passed: $RUN_URL
+
+          Merging this bumps \`build/emby-version.txt\`, which is what \`release.yml\` builds
+          the next tag against.
+          EOF
+          )"
+
+      # Same idea as the PR above, keyed on an open issue with this version in
+      # its title instead of a branch, so a daily cron doesn't pile up
+      # duplicate issues for a version that's still broken.
+      - name: Report that the version is incompatible
+        if: needs.verify.result == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.emby-version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Emby Server $VERSION breaks the patch target"
+
+          open="$(gh issue list --state open --search "\"$title\" in:title" --json number --jq 'length')"
+          if [ "$open" != "0" ]; then
+            echo "An open issue already covers $VERSION."
+            exit 0
+          fi
+
+          gh issue create \
+            --title "$title" \
+            --body "$(cat <<EOF
+          \`ci.yml\` failed verifying Emby Server **$VERSION**: $RUN_URL
+
+          Most likely \`CreateHttpClientHandler\` changed shape and the Harmony postfix in
+          \`HttpHandlerPatch\` no longer applies. See \`build/verify-patch-target.sh\` and the
+          "Patch target" section of ARCHITECTURE.md for what the check asserts.
+          EOF
+          )"

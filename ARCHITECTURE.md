@@ -231,6 +231,15 @@ reads the Emby release list, compares the newest release against the pinned vers
 one exists — dispatches `ci.yml` against it. That run fetches that version's assemblies, re-runs the
 patch-target check, and leaves a candidate DLL as an artifact.
 
+`ci.yml` reports that run's outcome itself, in a `report-candidate` job that only exists when the
+workflow was dispatched with an `emby-version` input — a plain pull-request run never touches it. On a
+pass it opens a pull request that bumps `build/emby-version.txt` to the candidate version; on a
+failure it opens an issue. Neither creates a tag or a release — adopting a version stays the human
+step described in `release.yml` above, this only turns "green means adoptable" into something that
+doesn't require reading the Actions log to find out. Both checks skip quietly (already pinned to that
+version, or a branch/issue for it already exists) so a check dispatched daily from a cron doesn't pile
+up duplicates while a version stays unadopted or broken.
+
 The two lines Emby publishes in parallel (stable `4.9.x` and beta `4.10.0.x`) are separated by the
 `prerelease` flag rather than by version order, because taking the newest tag would silently track
 betas. The flags found are printed to the job summary, so the decision is visible rather than assumed.
