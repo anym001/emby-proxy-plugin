@@ -31,7 +31,6 @@ namespace EmbyProxyRouter
             try
             {
                 var options = GetOptions();
-                Localizer.SetLanguage(options.Language);
 
                 ProxyRuntime.Initialize(_logger);
                 ProxyRuntime.ApplyOptions(options);
@@ -77,7 +76,6 @@ namespace EmbyProxyRouter
 
         protected override PluginOptions OnBeforeShowUI(PluginOptions options)
         {
-            Localizer.SetLanguage(options.Language);
             RefreshStatus(options);
 
             // Kick off a check in the background so the next page load is current, without making
@@ -92,8 +90,6 @@ namespace EmbyProxyRouter
 
         protected override void OnOptionsSaved(PluginOptions options)
         {
-            // Language first: the status lines built below must already be in the new language.
-            Localizer.SetLanguage(options.Language);
             ProxyRuntime.ApplyOptions(options);
             RefreshStatus(options);
         }

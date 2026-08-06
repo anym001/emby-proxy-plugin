@@ -71,8 +71,8 @@
   </ItemGroup>
 
   <!--
-    Translations. Any *.json dropped into Localization/ is embedded automatically and becomes
-    selectable — adding a language needs no csproj change, only a matching PluginLanguage entry.
+    Translations. Any *.json dropped into Localization/ is embedded automatically and is picked up
+    by its file name — adding a language needs no csproj change and no code change.
   -->
   <ItemGroup>
     <EmbeddedResource Include="Localization\*.json">

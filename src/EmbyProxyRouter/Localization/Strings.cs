@@ -19,9 +19,6 @@ namespace EmbyProxyRouter.Localization
         public static string LabelFailurePolicy => Localizer.Get(nameof(LabelFailurePolicy));
         public static string LabelPatchStatus => Localizer.Get(nameof(LabelPatchStatus));
 
-        public static string LabelLanguage => Localizer.Get(nameof(LabelLanguage));
-        public static string DescLanguage => Localizer.Get(nameof(DescLanguage));
-
         public static string LabelEnableProxy => Localizer.Get(nameof(LabelEnableProxy));
         public static string DescEnableProxy => Localizer.Get(nameof(DescEnableProxy));
 

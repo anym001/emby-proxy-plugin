@@ -9,9 +9,6 @@
   "LabelFailurePolicy": "Behaviour on proxy failure",
   "LabelPatchStatus": "Patch status",
 
-  "LabelLanguage": "Language",
-  "DescLanguage": "Language of this settings page. 'Auto' follows the server's UI culture and falls back to English.",
-
   "LabelEnableProxy": "Enable proxy",
   "DescEnableProxy": "When disabled, Emby behaves exactly as it would without this plugin.",
 

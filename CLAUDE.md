@@ -63,16 +63,22 @@ User-visible strings live in `src/EmbyProxyRouter/Localization/*.json` and are e
 time. `en.json` is the reference: every key must exist there, and other languages fall back to it
 key by key.
 
+* **The plugin has no language setting, and must not grow one.** The language follows Emby's own
+  display language, which the server applies process-wide in
+  `ApplicationHost.SetDefaultThreadCulture` (from the host constructor *and* from
+  `OnConfigurationUpdated`, with no per-request localization middleware anywhere). `Localizer` reads
+  `CultureInfo.CurrentUICulture` on each lookup, so the page tracks the dashboard and needs no
+  restart. A separate switch would let the plugin page disagree with the rest of the dashboard.
 * Settings-page labels and descriptions use `[DisplayNameL(nameof(Strings.X), typeof(Strings))]`.
   This resolves through Emby's `LocalizableString`, which requires `Strings` to expose a **public
   static string property with a getter**. It caches the reflected `PropertyInfo` but re-invokes the
-  getter each read, which is what lets the language change without a restart.
+  getter each read, which is the other half of what makes a live language change work.
 * Runtime strings (status text, validation errors, health-check detail) call `Localizer.Get` /
   `Localizer.Format` directly.
 * Adding a string: add the key to `en.json` **and** every other language file, then add a static
   property to `Strings` only if an attribute needs it.
-* Adding a language: add `<code>.json` (embedded automatically, no csproj change) and a matching
-  `PluginLanguage` enum entry.
+* Adding a language: drop in `<code>.json` using the culture code Emby uses (`fr`, `zh-CN`,
+  `pt-BR`, …). Nothing else changes — no csproj entry, no C# change.
 * Log message *prefixes* stay English so log lines remain greppable, but embedded detail strings are
   localized because they are also shown in the dashboard.
 

@@ -48,12 +48,6 @@ namespace EmbyProxyRouter
         [DisplayNameL(nameof(Strings.LabelPatchStatus), typeof(Strings))]
         public StatusItem PatchStatus { get; set; } = new StatusItem();
 
-        // ---- Language ---------------------------------------------------------------------------
-
-        [DisplayNameL(nameof(Strings.LabelLanguage), typeof(Strings))]
-        [DescriptionL(nameof(Strings.DescLanguage), typeof(Strings))]
-        public PluginLanguage Language { get; set; } = PluginLanguage.Auto;
-
         // ---- Proxy ------------------------------------------------------------------------------
 
         [DisplayNameL(nameof(Strings.LabelEnableProxy), typeof(Strings))]

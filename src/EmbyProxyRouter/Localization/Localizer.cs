@@ -2,31 +2,25 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text.Json;
 
 namespace EmbyProxyRouter.Localization
 {
     /// <summary>
-    /// Language of the settings page.
-    /// </summary>
-    /// <remarks>
-    /// To add a language: drop a <c>&lt;code&gt;.json</c> file into this folder (it is picked up as an
-    /// embedded resource automatically) and add a matching entry here. Nothing else needs to change.
-    /// </remarks>
-    public enum PluginLanguage
-    {
-        Auto = 0,
-        English = 1,
-        Deutsch = 2
-    }
-
-    /// <summary>
     /// Resolves user-visible strings from the embedded per-language JSON files.
     /// </summary>
     /// <remarks>
+    /// The language is not a plugin setting. It follows the server's display language, which Emby
+    /// applies process-wide in <c>ApplicationHost.SetDefaultThreadCulture</c>:
+    /// <code>
+    /// CultureInfo.DefaultThreadCurrentUICulture = (CultureInfo.CurrentUICulture = cultureInfo);
+    /// </code>
+    /// That runs both in the host constructor and again from <c>OnConfigurationUpdated</c>, and the
+    /// server installs no per-request localization middleware. Reading
+    /// <see cref="CultureInfo.CurrentUICulture"/> at lookup time therefore tracks the dashboard
+    /// language exactly, and picks up a change to it without a restart.
+    ///
     /// Kept static and free of Emby dependencies because <see cref="Strings"/> is reached through
     /// Emby's localization attributes, which call public static property getters with no context.
     ///
@@ -39,58 +33,46 @@ namespace EmbyProxyRouter.Localization
         private const string ResourcePrefix = "EmbyProxyRouter.Localization.";
         private const string FallbackCode = "en";
 
+        private static readonly Lazy<string[]> Codes = new Lazy<string[]>(DiscoverCodes);
+
         private static readonly ConcurrentDictionary<string, Dictionary<string, string>> Tables =
             new ConcurrentDictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
 
-        private static volatile string _code = FallbackCode;
-
-        /// <summary>The language code currently in effect, e.g. "en" or "de".</summary>
-        public static string CurrentCode
-        {
-            get { return _code; }
-        }
+        // Culture name -> shipped language code. Resolution is a few string comparisons, but it runs
+        // on every label read while the settings page renders, so the answer is memoised.
+        private static readonly ConcurrentDictionary<string, string> ResolvedCodes =
+            new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Language codes for which a JSON file is embedded in this assembly.</summary>
         public static IReadOnlyList<string> AvailableCodes
         {
+            get { return Codes.Value; }
+        }
+
+        /// <summary>
+        /// The language code currently in effect, derived from Emby's display language.
+        /// </summary>
+        public static string CurrentCode
+        {
             get
             {
-                return typeof(Localizer).Assembly.GetManifestResourceNames()
-                    .Where(n => n.StartsWith(ResourcePrefix, StringComparison.Ordinal) &&
-                                n.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                    .Select(n => n.Substring(ResourcePrefix.Length, n.Length - ResourcePrefix.Length - 5))
-                    .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-            }
-        }
+                string cultureName;
+                try
+                {
+                    cultureName = CultureInfo.CurrentUICulture.Name;
+                }
+                catch (Exception)
+                {
+                    return FallbackCode;
+                }
 
-        public static void SetLanguage(PluginLanguage language)
-        {
-            _code = ResolveCode(language);
-        }
+                if (string.IsNullOrEmpty(cultureName))
+                {
+                    // The invariant culture carries no language information.
+                    return FallbackCode;
+                }
 
-        private static string ResolveCode(PluginLanguage language)
-        {
-            switch (language)
-            {
-                case PluginLanguage.English:
-                    return "en";
-                case PluginLanguage.Deutsch:
-                    return "de";
-                default:
-                    // Auto: follow the process UI culture, but only if that language is actually
-                    // shipped — otherwise the page would silently fall back key by key.
-                    string culture;
-                    try
-                    {
-                        culture = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-                    }
-                    catch (Exception)
-                    {
-                        return FallbackCode;
-                    }
-
-                    return Load(culture).Count > 0 ? culture : FallbackCode;
+                return ResolvedCodes.GetOrAdd(cultureName, ResolveCode);
             }
         }
 
@@ -102,13 +84,15 @@ namespace EmbyProxyRouter.Localization
                 return string.Empty;
             }
 
+            var code = CurrentCode;
+
             string value;
-            if (Load(_code).TryGetValue(key, out value))
+            if (Load(code).TryGetValue(key, out value))
             {
                 return value;
             }
 
-            if (!string.Equals(_code, FallbackCode, StringComparison.OrdinalIgnoreCase) &&
+            if (!string.Equals(code, FallbackCode, StringComparison.OrdinalIgnoreCase) &&
                 Load(FallbackCode).TryGetValue(key, out value))
             {
                 return value;
@@ -135,6 +119,60 @@ namespace EmbyProxyRouter.Localization
             {
                 // A malformed placeholder in a translation must not take down the settings page.
                 return template;
+            }
+        }
+
+        /// <summary>
+        /// Maps an Emby culture name onto one of the shipped language files.
+        /// </summary>
+        /// <remarks>
+        /// Emby's language values are a mix of neutral and regional codes ("de", "pt-BR", "zh-CN",
+        /// and "en-us" by default), so an exact match is tried before falling back to the neutral
+        /// part. That lets a regional translation be added later as its own file without changing
+        /// anything here: pt-BR.json wins for pt-BR, and pt.json still covers pt-PT.
+        /// </remarks>
+        private static string ResolveCode(string cultureName)
+        {
+            var codes = Codes.Value;
+
+            foreach (var code in codes)
+            {
+                if (string.Equals(code, cultureName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return code;
+                }
+            }
+
+            var separator = cultureName.IndexOf('-');
+            if (separator > 0)
+            {
+                var neutral = cultureName.Substring(0, separator);
+                foreach (var code in codes)
+                {
+                    if (string.Equals(code, neutral, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return code;
+                    }
+                }
+            }
+
+            return FallbackCode;
+        }
+
+        private static string[] DiscoverCodes()
+        {
+            try
+            {
+                return typeof(Localizer).Assembly.GetManifestResourceNames()
+                    .Where(n => n.StartsWith(ResourcePrefix, StringComparison.Ordinal) &&
+                                n.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    .Select(n => n.Substring(ResourcePrefix.Length, n.Length - ResourcePrefix.Length - 5))
+                    .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch (Exception)
+            {
+                return new[] { FallbackCode };
             }
         }
 

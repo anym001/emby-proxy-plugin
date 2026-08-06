@@ -181,28 +181,46 @@ Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as use
 | **Bypass list** | One entry per line: CIDR, single IP, hostname or `*.example.com`. |
 | **Check URLs** | Fetched through the proxy; the first HTTP 2xx response counts as reachable. Empty = TCP check only. |
 | **Check interval** | Seconds between reachability checks, minimum 10. |
-| **Language** | Language of the settings page: `Auto`, `English` or `Deutsch`. |
 
 ### Languages
 
-The settings page is localized. Translations live in `src/EmbyProxyRouter/Localization/*.json` and
-are embedded into the DLL at build time — there are no loose files to deploy.
+The settings page follows the server's display language. **There is no language setting in the
+plugin** — that is deliberate: a second, independent language switch is not how Emby plugins behave,
+and it would let the plugin page disagree with the rest of the dashboard.
 
-`en.json` is the reference language. Any key missing from another file falls back to English key by
-key, so an incomplete translation degrades to mixed language rather than to blank labels. `Auto`
-follows the server process's UI culture and falls back to English when no matching file is shipped.
+Emby applies the configured display language process-wide, in
+`Emby.Server.Implementations.ApplicationHost.SetDefaultThreadCulture`:
+
+```csharp
+string uICulture = ServerConfigurationManager.Configuration.UICulture;
+...
+CultureInfo.DefaultThreadCurrentUICulture = (CultureInfo.CurrentUICulture = cultureInfo);
+```
+
+That method is called from the host constructor **and** from `OnConfigurationUpdated`, and the server
+installs no per-request localization middleware. So `CultureInfo.CurrentUICulture` is exactly the
+dashboard language, and reading it at lookup time picks up a change without a server restart.
+
+Translations live in `src/EmbyProxyRouter/Localization/*.json` and are embedded into the DLL at build
+time — there are no loose files to deploy. `en.json` is the reference language: any key missing from
+another file falls back to English key by key, so an incomplete translation degrades to mixed
+language rather than to blank labels. A language Emby offers but the plugin does not ship shows
+English.
+
+Culture names are matched exactly first, then by their neutral part — `de-AT` uses `de.json`, while a
+`pt-BR.json` added later would win over `pt.json` for Brazilian Portuguese.
 
 Labels and descriptions are wired through Emby's own localization attributes
-(`[DisplayNameL(nameof(Strings.X), typeof(Strings))]`) rather than literal strings, which is what
-lets the page switch language immediately on save instead of requiring a restart.
+(`[DisplayNameL(nameof(Strings.X), typeof(Strings))]`) rather than literal strings. The attribute
+caches the reflected `PropertyInfo` but re-invokes the getter on every read, which is what makes the
+page follow the language live.
 
 **Adding a language:**
 
-1. Copy `en.json` to `<code>.json` (e.g. `fr.json`) in `src/EmbyProxyRouter/Localization/` and
-   translate the values. Leave the keys untouched.
-2. Add a matching entry to the `PluginLanguage` enum in `Localization/Localizer.cs` and map it in
-   `ResolveCode`.
-3. Rebuild. The file is embedded automatically; the `.csproj` needs no change.
+1. Copy `en.json` to `<code>.json` in `src/EmbyProxyRouter/Localization/` and translate the values.
+   Leave the keys untouched. Use the code Emby uses for that language (`fr`, `zh-CN`, `pt-BR`, …).
+2. Rebuild. The file is embedded and picked up automatically; neither the `.csproj` nor any C# code
+   needs to change.
 
 Log messages keep their English prefixes so log lines stay greppable and comparable across
 installations, but detail text embedded in them is localized, because the same text is shown in the
