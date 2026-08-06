@@ -1,0 +1,102 @@
+{
+  "_comment": "Reference language. Every key must exist here; other languages may omit keys and fall back to this file.",
+  "_languageName": "English",
+
+  "EditorTitle": "Proxy Router",
+  "EditorDescription": "Routes outbound HTTP(S) traffic initiated by the Emby core (metadata providers, remote images, subtitle downloads) through a proxy. Private networks and Emby's own licensing servers are always contacted directly.",
+
+  "LabelProxyStatus": "Proxy status",
+  "LabelFailurePolicy": "Behaviour on proxy failure",
+  "LabelPatchStatus": "Patch status",
+
+  "LabelEnableProxy": "Enable proxy",
+  "DescEnableProxy": "When disabled, Emby behaves exactly as it would without this plugin.",
+
+  "LabelScheme": "Proxy scheme",
+  "DescScheme": "Only used when the proxy address does not carry a scheme of its own.",
+
+  "LabelProxyAddress": "Proxy address",
+  "DescProxyAddress": "Either host:port (for example 192.168.1.10:8080) or a full URL (for example socks5://192.168.1.10:1080). Put credentials in the fields below - .NET ignores credentials embedded in the URL for SOCKS5.",
+
+  "LabelUsername": "Username",
+  "DescUsername": "Optional. Takes precedence over credentials embedded in the URL.",
+
+  "LabelPassword": "Password",
+
+  "LabelIgnoreCert": "Ignore certificate validation",
+  "DescIgnoreCert": "Required for HTTPS proxies using a self-signed certificate. Affects both the connection to the proxy and the destination connections tunnelled through it.",
+
+  "LabelFailOpen": "Connect directly when the proxy is unavailable",
+  "DescFailOpen": "OFF (default, fail-closed): if the proxy is unreachable, affected requests are aborted and logged. ON (fail-open): requests go straight out to the internet without the proxy - every such case is logged as a warning.",
+
+  "LabelBypassList": "Bypass list",
+  "DescBypassList": "One entry per line. Accepts CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution is performed - hostnames are matched literally.",
+
+  "LabelCheckUrls": "Check URLs",
+  "DescCheckUrls": "One URL per line, fetched through the proxy. The first successful response (HTTP 2xx) counts as reachable. Leave empty to check TCP connectivity only.",
+
+  "LabelCheckInterval": "Check interval (seconds)",
+  "DescCheckInterval": "Minimum 10 seconds.",
+
+  "PatchCaption": "Patch",
+  "PatchActive": "Active - Emby core traffic passes through this plugin.",
+  "PatchInactive": "NOT active - {0} No traffic is being redirected.",
+  "UnknownError": "unknown error",
+
+  "FailOpenCaption": "Fail-open",
+  "FailOpenText": "If the proxy fails, requests go straight to the internet WITHOUT the proxy (logged as a warning).",
+  "FailClosedCaption": "Fail-closed",
+  "FailClosedText": "If the proxy fails, affected requests are blocked. No silent fallback to a direct connection.",
+
+  "DisabledCaption": "Disabled",
+  "DisabledText": "The proxy is switched off; Emby connects directly.",
+  "ReachableCaption": "Reachable",
+  "UnreachableCaption": "Unreachable",
+  "UnreachableSuffixFailOpen": " - requests are currently going out directly.",
+  "UnreachableSuffixFailClosed": " - requests are currently being blocked.",
+  "CheckingCaption": "Checking",
+  "CheckingTextFailOpen": "No check result yet. Until then, requests go out directly.",
+  "CheckingTextFailClosed": "No check result yet. Until then, affected requests are blocked.",
+  "NotCheckedYet": "Not checked yet",
+  "AgeSuffix": " (as of {0} s ago)",
+
+  "HealthProxyDisabled": "Proxy is disabled",
+  "HealthAddressInvalid": "Proxy address is invalid",
+  "HealthTcpOnlyOk": "TCP connect succeeded (no HTTP check configured)",
+  "HealthHttpOk": "HTTP check via {0} succeeded ({1}, {2} ms)",
+  "HealthNoHttpOk": "TCP reachable, but no HTTP check succeeded. Last error: {0}",
+  "HealthCheckFailed": "Check failed: {0}",
+  "HealthTcpTimeout": "TCP connect to {0}:{1} timed out after {2} s",
+  "HealthTcpFailed": "TCP connect to {0}:{1} failed: {2}",
+  "HealthInvalidUrl": "Invalid check URL: {0}",
+  "HealthHttpStatus": "{0} answered with HTTP {1}",
+  "HealthUrlFailed": "{0} failed: {1}",
+
+  "ReasonDisabled": "proxy is disabled",
+  "ReasonMisconfigured": "proxy is enabled but misconfigured",
+  "ReasonBypassed": "destination is on the bypass list",
+  "ReasonReachable": "proxy is reachable",
+  "ReasonNotChecked": "proxy status has not been checked yet",
+  "ReasonUnreachable": "proxy is unreachable",
+
+  "BlockedMessage": "Proxy unreachable - request blocked: {0} ({1}). Fail-closed is active.",
+  "FailOpenMessage": "Fail-open active - request is going out DIRECTLY, without the proxy: {0} ({1})",
+
+  "AuthNone": "no auth",
+  "AuthAs": "auth as {0}",
+
+  "ErrNoAddress": "No proxy address configured.",
+  "ErrInvalidUrl": "Proxy address is not a valid URL: {0}",
+  "ErrUnsupportedScheme": "Unsupported proxy scheme '{0}'. Supported schemes are http, https and socks5.",
+  "ErrNeedPort": "Proxy address needs a port, for example 192.168.1.10:8080 or socks5://192.168.1.10:1080",
+  "ErrPortNotNumber": "Proxy port is not a number: {0}",
+  "ErrNoHost": "Proxy address contains no host.",
+  "ErrNeedExplicitPort": "Proxy address needs an explicit port.",
+  "ErrPortRange": "Proxy port is outside 1-65535: {0}",
+  "ErrInvalidWildcard": "Invalid wildcard entry: {0}",
+  "ErrInvalidCidr": "Invalid CIDR entry: {0}",
+  "ErrInvalidIp": "Invalid IP address in: {0}",
+  "ErrInvalidPrefix": "Invalid prefix length in: {0}",
+  "ErrPrefixFamily": "Prefix length does not match the address family: {0}",
+  "ErrIntervalMin": "The check interval must be at least 10 seconds."
+}

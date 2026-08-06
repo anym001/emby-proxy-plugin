@@ -1,0 +1,122 @@
+name: Build
+
+on:
+  # Note: GitHub only offers the "Run workflow" button for workflows that exist
+  # on the default branch, so manual runs are possible once this is on main.
+  workflow_dispatch:
+    inputs:
+      emby-version:
+        description: Emby Server version to build against (blank = the version pinned in build/emby-version.txt)
+        required: false
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Keyed on the Emby version as well, so a run checking a new Emby release does
+# not cancel the one verifying the pinned version.
+concurrency:
+  group: build-${{ github.ref }}-${{ inputs.emby-version }}
+  cancel-in-progress: true
+
+env:
+  PROJECT: src/EmbyProxyRouter/EmbyProxyRouter.csproj
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # build/emby-version.txt is the single source of truth for the pinned
+      # version; inputs.* is empty on events that carry no inputs (pull_request).
+      - name: Resolve the Emby version
+        id: emby
+        run: |
+          set -euo pipefail
+          version="${{ inputs.emby-version }}"
+          if [ -z "$version" ]; then
+            version="$(tr -d '[:space:]' < build/emby-version.txt)"
+            echo "No version requested - using the pinned $version"
+          else
+            echo "Building against the requested $version"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Built against Emby Server \`$version\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # The reference assemblies are proprietary and deliberately not committed, so
+      # every run would otherwise re-download a ~180 MB .deb to keep a few DLLs.
+      #
+      # The fetch script's hash is part of the key on purpose: a cache entry is
+      # immutable, and a hit skips the save. Without it, changing which files the
+      # script keeps would leave an incomplete lib/ cached under a key that keeps
+      # hitting - and every later run would re-download the .deb to fill the gap.
+      - name: Cache Emby assemblies
+        uses: actions/cache@v4
+        with:
+          path: lib
+          key: emby-refs-${{ steps.emby.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
+
+      - name: Fetch Emby assemblies
+        run: bash build/fetch-emby-refs.sh "${{ steps.emby.outputs.version }}"
+
+      # The check that actually matters when moving to a new Emby version.
+      # Compiling proves little: the four referenced API assemblies rarely change,
+      # while the patched method is internal to the server and has changed before.
+      # A Harmony postfix that no longer matches never applies - the plugin would
+      # install cleanly and silently route nothing.
+      - name: Verify the patch target
+        run: |
+          set -euo pipefail
+          dotnet tool install -g ilspycmd --version 9.1.0.7988
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          bash build/verify-patch-target.sh | tee patch-target.txt
+          {
+            echo "### Patch target"
+            echo '```'
+            cat patch-target.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore
+        run: dotnet restore "$PROJECT"
+
+      - name: Build
+        run: dotnet build "$PROJECT" -c Release --no-restore
+
+      # The plugin ships as one file: Harmony and the translations are embedded.
+      # If that ever stops being true, the size check below is what notices.
+      - name: Verify the output is a single self-contained plugin DLL
+        run: |
+          set -euo pipefail
+          out=src/EmbyProxyRouter/bin/Release
+          dll="$out/EmbyProxyRouter.dll"
+          test -f "$dll" || { echo "::error::$dll was not produced"; exit 1; }
+
+          if [ -f "$out/0Harmony.dll" ]; then
+            echo "::error::0Harmony.dll was copied next to the plugin; it must stay embedded"
+            exit 1
+          fi
+
+          size=$(stat -c%s "$dll")
+          echo "EmbyProxyRouter.dll: $size bytes"
+          # An unembedded Harmony would drop this well below a megabyte.
+          if [ "$size" -lt 1000000 ]; then
+            echo "::error::plugin DLL is suspiciously small - are the embedded resources missing?"
+            exit 1
+          fi
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: EmbyProxyRouter-emby${{ steps.emby.outputs.version }}-${{ github.sha }}
+          path: src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll
+          if-no-files-found: error

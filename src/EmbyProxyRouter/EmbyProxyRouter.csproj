@@ -1,0 +1,88 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      net8.0 is not a preference, it is a requirement:
+        * Emby Server 4.9.5.0 ships self-contained on .NET 8.0.25 (EmbyServer.runtimeconfig.json).
+        * SocketsHttpHandler — which is what Emby's handler factory actually returns, and the
+          only handler type in .NET that speaks SOCKS5 — does not exist in netstandard2.x.
+    -->
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>EmbyProxyRouter</AssemblyName>
+    <RootNamespace>EmbyProxyRouter</RootNamespace>
+    <Version>1.0.0.0</Version>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <!-- Single-file deployment: Harmony is embedded, not copied next to the plugin. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <EmbyLibDir Condition="'$(EmbyLibDir)' == ''">$(MSBuildThisFileDirectory)..\..\lib</EmbyLibDir>
+  </PropertyGroup>
+
+  <!--
+    Emby assemblies are referenced from disk, not from NuGet, on purpose:
+      * MediaBrowser.Server.Core on NuGet stops at 4.9.1.90 — there is no 4.9.5.0 package.
+      * Emby.Web.GenericEdit is not published to NuGet at all, but BasePluginSimpleUI<T>
+        requires EditableOptionsBase from it.
+    Run build/fetch-emby-refs.sh to populate lib/.
+  -->
+  <ItemGroup>
+    <Reference Include="MediaBrowser.Common">
+      <HintPath>$(EmbyLibDir)\MediaBrowser.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Controller">
+      <HintPath>$(EmbyLibDir)\MediaBrowser.Controller.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Model">
+      <HintPath>$(EmbyLibDir)\MediaBrowser.Model.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Emby.Web.GenericEdit">
+      <HintPath>$(EmbyLibDir)\Emby.Web.GenericEdit.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!--
+    Harmony is referenced for compilation but excluded from the output, then embedded as a
+    resource and resolved at runtime (see HarmonyLoader). That keeps deployment to a single
+    DLL dropped into /config/plugins, which is what the Emby plugin folder expects.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Lib.Harmony" Version="2.3.6" GeneratePathProperty="true">
+      <ExcludeAssets>runtime</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(PkgLib_Harmony)\lib\net8.0\0Harmony.dll">
+      <LogicalName>EmbyProxyRouter.Embedded.0Harmony.dll</LogicalName>
+      <Visible>false</Visible>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!--
+    Translations. Any *.json dropped into Localization/ is embedded automatically and is picked up
+    by its file name — adding a language needs no csproj change and no code change.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\*.json">
+      <LogicalName>EmbyProxyRouter.Localization.%(Filename).json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <Target Name="VerifyEmbyRefs" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(EmbyLibDir)\MediaBrowser.Controller.dll')"
+           Text="Emby reference assemblies not found in '$(EmbyLibDir)'. Run build/fetch-emby-refs.sh first." />
+  </Target>
+
+</Project>

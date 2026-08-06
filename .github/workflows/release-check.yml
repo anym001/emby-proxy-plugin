@@ -1,0 +1,144 @@
+name: Check Emby Releases
+
+# Finds Emby Server releases newer than the version this repository is pinned to
+# and starts a build against them. That build re-verifies the patch target, which
+# is the thing a new Emby version can actually break.
+#
+# Manual for now; uncomment the schedule to have it run by itself. Like every
+# workflow_dispatch workflow, it is only offered in the Actions UI once it is on
+# the default branch.
+on:
+  workflow_dispatch:
+    inputs:
+      include-prerelease:
+        description: Also consider Emby beta releases
+        required: false
+        default: "false"
+  # schedule:
+  #   - cron: "0 6 * * 1"   # Mondays, 06:00 UTC
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Find the newest Emby release
+        id: versions
+        env:
+          # Authenticate the API read: unauthenticated calls share a 60 req/h
+          # per-IP budget on shared runners. Even authenticated, GitHub
+          # occasionally returns a transient non-JSON body, which would make jq
+          # fail with an opaque error, so fetch_json retries and validates that
+          # the body really is JSON before use.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INCLUDE_PRERELEASE: ${{ inputs.include-prerelease }}
+        run: |
+          set -euo pipefail
+
+          fetch_json() {
+            local url="$1" attempt response http_code body
+            for attempt in 1 2 3; do
+              response="$(curl -sS -w '\n%{http_code}' \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "$url" 2>/dev/null || true)"
+              http_code="${response##*$'\n'}"
+              body="${response%$'\n'*}"
+              if [ "$http_code" = "200" ] && jq empty >/dev/null 2>&1 <<<"$body"; then
+                printf '%s' "$body"
+                return 0
+              fi
+              echo "::warning::Attempt $attempt/3 failed for $url (HTTP ${http_code:-none}): $(head -c 200 <<<"$body")" >&2
+              sleep $((attempt * 2))
+            done
+            return 1
+          }
+
+          RELEASES="$(fetch_json "https://api.github.com/repos/MediaBrowser/Emby.Releases/releases?per_page=100")" \
+            || { echo "::error::Could not fetch the Emby release list."; exit 1; }
+
+          # Emby publishes a stable line (4.9.x) and a beta line (4.10.0.x) side
+          # by side, so taking the newest tag would silently track betas. Report
+          # what the flags actually say, then filter on them.
+          {
+            echo "### Newest Emby releases as published"
+            echo
+            echo "| Tag | Prerelease |"
+            echo "| --- | --- |"
+            jq -r '.[] | "| \(.tag_name) | \(.prerelease) |"' <<<"$RELEASES" | head -8
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${INCLUDE_PRERELEASE:-false}" = "true" ]; then
+            SELECT='.[]'
+          else
+            SELECT='.[] | select(.prerelease == false)'
+          fi
+
+          # Four-part numeric tags only - that is what the .deb URL is built from.
+          CANDIDATES="$(jq -r "$SELECT | .tag_name" <<<"$RELEASES" \
+            | grep -E '^[0-9]+(\.[0-9]+){3}$' \
+            | sort -V || true)"
+
+          if [ -z "$CANDIDATES" ]; then
+            echo "::error::No usable Emby release tags found (include-prerelease=${INCLUDE_PRERELEASE:-false})."
+            exit 1
+          fi
+
+          LATEST="$(tail -1 <<<"$CANDIDATES")"
+          PINNED="$(tr -d '[:space:]' < build/emby-version.txt)"
+          NEWEST="$(printf '%s\n%s\n' "$PINNED" "$LATEST" | sort -V | tail -1)"
+
+          echo "Pinned:  $PINNED"
+          echo "Latest:  $LATEST"
+
+          if [ "$LATEST" = "$PINNED" ] || [ "$NEWEST" != "$LATEST" ]; then
+            echo "build_version=" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_version=$LATEST" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Start a build against the new release
+        if: steps.versions.outputs.build_version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_VERSION: ${{ steps.versions.outputs.build_version }}
+        run: |
+          set -euo pipefail
+          echo "Dispatching a build against Emby $BUILD_VERSION"
+          curl -sS --fail-with-body -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/dispatches" \
+            -d "{\"ref\":\"${{ github.ref_name }}\",\"inputs\":{\"emby-version\":\"$BUILD_VERSION\"}}"
+
+          {
+            echo
+            echo "### Result"
+            echo
+            echo "Emby **$BUILD_VERSION** is newer than the pinned **${{ steps.versions.outputs.pinned }}**."
+            echo "A build against it has been started - it re-verifies the patch target."
+            echo
+            echo "If that build is green, bump \`build/emby-version.txt\` to adopt the version."
+            echo "If it fails, the plugin needs attention before it can claim to support it."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report that nothing is pending
+        if: steps.versions.outputs.build_version == ''
+        run: |
+          {
+            echo
+            echo "### Result"
+            echo
+            echo "Nothing to do - the pinned **${{ steps.versions.outputs.pinned }}** is current"
+            echo "(newest considered release: **${{ steps.versions.outputs.latest }}**)."
+          } >> "$GITHUB_STEP_SUMMARY"
