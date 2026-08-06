@@ -52,5 +52,5 @@ silently routes nothing.
 - Never commit `lib/*.dll` — they are proprietary Emby binaries — and never commit build output or
   secrets.
 
-`CLAUDE.md` documents the architectural decisions and the traps behind them. It is worth reading
-before a larger change.
+[ARCHITECTURE.md](ARCHITECTURE.md) explains how the plugin hooks into Emby and why it is built that
+way, with the evidence behind each decision. It is worth reading before a larger change.

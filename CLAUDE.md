@@ -83,8 +83,21 @@ without re-verifying, because each one is load-bearing:
 * **`ProxyState.Decide` is the single routing authority.** The proxy and the gate must never reach
   different verdicts for the same destination. Add routing logic there, not in either caller.
 
-`README.md` documents each of these with the evidence behind it. Keep it in sync when behaviour
+`ARCHITECTURE.md` documents each of these with the evidence behind it. Keep it in sync when behaviour
 changes.
+
+## Where documentation goes
+
+Three files, and the split is deliberate — do not let technical detail drift back into the README:
+
+* **`README.md` is for end users**: what the plugin does and does not do, installing it, the settings
+  table, fail-closed vs. fail-open, known limitations. No decompiled code, no CI internals, no
+  reasoning about .NET handler lifetimes.
+* **`ARCHITECTURE.md` is for anyone reading or changing the code**: the patch target, the verified
+  SOCKS5 behaviour, why the proxy is dynamic and why the gate is a `DelegatingHandler`, localization
+  internals, building from source, and CI.
+* **`CONTRIBUTING.md` is the contributor-facing subset of this file** — the workflow and the traps,
+  not the rationale.
 
 ## Localization
 
@@ -132,5 +145,5 @@ to publish a `:dev` image that a staging instance pulls; the deliverable here is
 `/config/plugins`, so a `dev` branch would carry no artifact and gate nothing. Do not add one, and do
 not point Dependabot at a `target-branch`.
 
-`CONTRIBUTING.md` is the contributor-facing subset of this file. When a convention here changes and
-it affects someone sending a pull request, change it there too.
+When a convention here changes and it affects someone sending a pull request, change it in
+`CONTRIBUTING.md` too.
