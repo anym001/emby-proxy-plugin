@@ -38,18 +38,50 @@ fi
 
 echo "Checking $TYPE.$METHOD in $(basename "$DLL")..."
 
-# ilspycmd writes a version-update notice to stdout, so its output is never
-# empty — including when the type does not exist. Drop the chatter, then look
-# for the declaration itself rather than treating "got some output" as success.
-decompiled="$(ilspycmd -t "$TYPE" "$DLL" 2>/dev/null \
-              | grep -vE '^(You are not using|Latest version is)' || true)"
+# Whether ilspycmd ran at all has to be established before its output is
+# interpreted, because both failures look identical downstream: an empty
+# decompilation. `command -v` above only proves the shim is on PATH — the shim
+# is a native apphost that still has to locate a .NET runtime, and it exits
+# non-zero with "You must install .NET" when it cannot. On a machine where
+# dotnet lives outside the default location (DOTNET_ROOT unset, distro packages
+# under /usr/lib/dotnet) that is exactly what happens. Without this check the
+# script would then blame Emby for renaming a type the decompiler never looked
+# at — the most alarming message it can print, for the one cause that has
+# nothing to do with Emby.
+errors="$(mktemp)"
+trap 'rm -f "$errors"' EXIT
 
-SIMPLE_TYPE="${TYPE##*.}"
-if ! grep -qE "(class|struct|interface) $SIMPLE_TYPE\b" <<<"$decompiled"; then
+type_is_gone() {
   echo "FAIL: $TYPE was not found in $(basename "$DLL")." >&2
   echo "      The type has been renamed, moved to another assembly, or removed;" >&2
   echo "      Patch/HttpHandlerPatch.cs resolves it by name and would find nothing." >&2
   exit 1
+}
+
+if ! raw="$(ilspycmd -t "$TYPE" "$DLL" 2>"$errors")"; then
+  # A missing type is reported by throwing, not by decompiling to nothing, so
+  # this is the real finding and gets the real message rather than a stack trace.
+  if grep -q 'Could not find type definition' "$errors"; then
+    type_is_gone
+  fi
+
+  echo "FAIL: ilspycmd could not decompile $(basename "$DLL")." >&2
+  sed 's/^/      /' "$errors" >&2
+  echo "      This says nothing about the patch target - the check did not run." >&2
+  echo "      If the message is about a missing .NET runtime, point DOTNET_ROOT at" >&2
+  echo "      your installation (e.g. export DOTNET_ROOT=/usr/lib/dotnet)." >&2
+  exit 1
+fi
+
+# ilspycmd writes a version-update notice to stdout, so its output is never
+# empty — including when the type does not exist. Drop the chatter, then look
+# for the declaration itself rather than treating "got some output" as success.
+decompiled="$(grep -vE '^(You are not using|Latest version is)' <<<"$raw" || true)"
+
+# Backstop for an ilspycmd that decompiles to nothing instead of failing.
+SIMPLE_TYPE="${TYPE##*.}"
+if ! grep -qE "(class|struct|interface) $SIMPLE_TYPE\b" <<<"$decompiled"; then
+  type_is_gone
 fi
 
 # The declaration, not the call sites: match a line that has the method name
