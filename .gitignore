@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+artifacts/
+
+# Emby reference assemblies — fetched by build/fetch-emby-refs.sh, never committed.
+# These are proprietary Emby binaries and must not be redistributed.
+lib/*.dll
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+!lib/.gitkeep
