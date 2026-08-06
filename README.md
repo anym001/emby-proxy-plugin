@@ -132,6 +132,23 @@ For a different Emby version:
 FORCE=1 ./build/fetch-emby-refs.sh 4.9.6.0
 ```
 
+### Building in CI
+
+`.github/workflows/build.yml` performs the same two steps on a GitHub runner and uploads the
+resulting DLL as a build artifact, so a plugin binary can be produced without a local .NET SDK.
+
+It is **manual for now**: run it from *Actions → Build → Run workflow*. The Emby version is a
+workflow input (default `4.9.5.0`), which is also the cache key for the fetched reference
+assemblies — so only the first run per version pays for the ~180 MB download.
+
+To also run it on pull requests, uncomment the `pull_request` trigger at the top of the file.
+Nothing else needs to change: the `EMBY_VERSION` fallback already covers events that carry no
+inputs.
+
+Besides compiling, the workflow asserts that the output is still a single self-contained DLL — no
+`0Harmony.dll` next to it, and not suspiciously small — because that property is what makes
+deployment a one-file copy, and it would otherwise break silently.
+
 ---
 
 ## Installation (Unraid / Docker)
@@ -293,6 +310,7 @@ disagree.
 ## Project layout
 
 ```
+.github/workflows/build.yml   CI build (manual for now)
 build/fetch-emby-refs.sh      Fetches the Emby reference assemblies
 lib/                          Target folder for them (not committed)
 src/EmbyProxyRouter/

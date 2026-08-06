@@ -1,0 +1,88 @@
+name: Build
+
+# Manual for now. To have it run on pull requests as well, uncomment the trigger
+# below — the rest of this workflow already works unchanged for that event
+# (see the EMBY_VERSION fallback, which covers events that carry no inputs).
+on:
+  workflow_dispatch:
+    inputs:
+      emby-version:
+        description: Emby Server version to take the reference assemblies from
+        required: false
+        default: "4.9.5.0"
+  # pull_request:
+  #   branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes an in-flight run pointless.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # inputs.* is empty on events that have no inputs (e.g. pull_request), so the
+  # literal is the effective default there.
+  EMBY_VERSION: ${{ inputs.emby-version || '4.9.5.0' }}
+  PROJECT: src/EmbyProxyRouter/EmbyProxyRouter.csproj
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # The reference assemblies are proprietary and deliberately not committed, so
+      # every run would otherwise re-download a ~180 MB .deb to keep four DLLs.
+      # The cache key carries the version, so bumping it fetches afresh.
+      - name: Cache Emby reference assemblies
+        uses: actions/cache@v4
+        with:
+          path: lib
+          key: emby-refs-${{ env.EMBY_VERSION }}
+
+      - name: Fetch Emby reference assemblies
+        run: bash build/fetch-emby-refs.sh "$EMBY_VERSION"
+
+      - name: Restore
+        run: dotnet restore "$PROJECT"
+
+      - name: Build
+        run: dotnet build "$PROJECT" -c Release --no-restore
+
+      # The plugin ships as one file: Harmony and the translations are embedded.
+      # If that ever stops being true, the size check below is what notices.
+      - name: Verify the output is a single self-contained plugin DLL
+        run: |
+          set -euo pipefail
+          out=src/EmbyProxyRouter/bin/Release
+          dll="$out/EmbyProxyRouter.dll"
+          test -f "$dll" || { echo "::error::$dll was not produced"; exit 1; }
+
+          if [ -f "$out/0Harmony.dll" ]; then
+            echo "::error::0Harmony.dll was copied next to the plugin; it must stay embedded"
+            exit 1
+          fi
+
+          size=$(stat -c%s "$dll")
+          echo "EmbyProxyRouter.dll: $size bytes"
+          # An unembedded Harmony would drop this well below a megabyte.
+          if [ "$size" -lt 1000000 ]; then
+            echo "::error::plugin DLL is suspiciously small - are the embedded resources missing?"
+            exit 1
+          fi
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: EmbyProxyRouter-${{ github.sha }}
+          path: src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll
+          if-no-files-found: error
