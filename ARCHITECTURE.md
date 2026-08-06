@@ -194,7 +194,7 @@ is the throwaway merge commit GitHub creates for the run: it belongs to no branc
 resolved once the run is over. The checks still run against that merge, because testing the merge
 result is the point; only the label points at a commit that exists.
 
-### `release.yml` — tags matching `v*`
+### `release.yml` — tags matching `v*`, or a published release
 
 The only workflow that produces something a user installs. It builds against the pinned Emby version
 — deliberately with no override input, because the DLL is handed to users and the version it was
@@ -206,11 +206,20 @@ any commit, including one that never went through a pull request, and shipping a
 patch no longer matches is the one failure this project cannot afford: it is silent. Publishing uses
 the preinstalled `gh` CLI rather than a third-party action, so it adds no supply chain of its own.
 
-Cutting a release is therefore one command:
+Cutting a release is one command:
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
 ```
+
+The workflow also triggers on `release: published`, because publishing a release through the GitHub
+UI (or the API) with a tag name that doesn't exist yet creates that tag through the Releases endpoint
+rather than a real push — that path emits a `release` event but never a `push` event, so `push: tags`
+alone never sees it and the tag is created with nothing built for it. On a `release` event
+`GITHUB_SHA`/`GITHUB_REF_NAME` resolve to the default branch tip, not the tag, so the checkout step
+and the tag-name resolution both read `github.event.release.tag_name` explicitly instead of trusting
+the ambient ref. Publishing a pre-existing tag as a release this way triggers both events for the same
+tag; the existing-release fallback below absorbs the duplicate run rather than failing.
 
 If a release already exists for the tag — drafted in the UI beforehand, or the workflow re-run — the
 DLL is uploaded to it instead of the run failing.
