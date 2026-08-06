@@ -142,12 +142,14 @@ and rebuild. Pull requests with translations are welcome — see [CONTRIBUTING.m
   building from source, and CI.
 * [CONTRIBUTING.md](CONTRIBUTING.md) — reporting bugs, translations, pull requests.
 
-## Licence
+## License
 
-GPL-3.0 — see [LICENSE](LICENSE).
+Emby Proxy Router is released under the **GNU General Public License v3.0** (GPL-3.0). You may use,
+redistribute, and modify the software — but if you pass on a (modified) version, in source or as a
+compiled DLL, you must make the complete corresponding source available under the same license
+(GPL §6). The full text is in [`LICENSE`](LICENSE).
 
-The operating principle (a Harmony postfix on Emby's internal handler factory) is inspired by
-[StrmAssistant](https://github.com/sjtuross/StrmAssistant) (GPL-3.0).
+Copyright (C) 2026 anym001
 
 ---
 
