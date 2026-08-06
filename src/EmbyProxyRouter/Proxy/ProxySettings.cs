@@ -28,6 +28,14 @@ namespace EmbyProxyRouter.Proxy
 
         public bool IgnoreCertificateValidation { get; private set; }
 
+        /// <summary>
+        /// Every entry must answer 2xx. The list is a set of assertions, not a fallback chain.
+        /// </summary>
+        /// <remarks>
+        /// One plain-HTTP and one HTTPS entry together prove that the proxy both forwards and
+        /// tunnels. A first-success-wins pass could not establish that: it would stop at the first
+        /// entry and never reach the second.
+        /// </remarks>
         public IReadOnlyList<string> HealthCheckUrls { get; private set; }
 
         public TimeSpan HealthCheckInterval { get; private set; }
@@ -37,7 +45,7 @@ namespace EmbyProxyRouter.Proxy
             return new ProxySettings
             {
                 Enabled = false,
-                Bypass = BypassRules.Parse(BypassRules.Defaults),
+                Bypass = BypassRules.Parse(null),
                 HealthCheckUrls = new string[0],
                 HealthCheckInterval = TimeSpan.FromSeconds(60)
             };
@@ -50,19 +58,11 @@ namespace EmbyProxyRouter.Proxy
                 return Disabled();
             }
 
+            // HTTP first: it is the cheaper probe, and a proxy that refuses to forward at all should
+            // not cost a TLS handshake before the verdict is in.
             var urls = new List<string>();
-            if (!string.IsNullOrWhiteSpace(options.HealthCheckUrls))
-            {
-                foreach (var raw in options.HealthCheckUrls.Split(
-                             new[] { '\n', '\r', ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var url = raw.Trim();
-                    if (url.Length > 0 && !url.StartsWith("#", StringComparison.Ordinal))
-                    {
-                        urls.Add(url);
-                    }
-                }
-            }
+            AddCheckUrl(urls, options.HealthCheckUrlHttp);
+            AddCheckUrl(urls, options.HealthCheckUrlHttps);
 
             var interval = options.HealthCheckIntervalSeconds;
             if (interval < 10)
@@ -94,6 +94,15 @@ namespace EmbyProxyRouter.Proxy
             }
 
             return settings;
+        }
+
+        /// <summary>An empty field means "skip this probe", not "check an empty URL".</summary>
+        private static void AddCheckUrl(List<string> urls, string url)
+        {
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                urls.Add(url.Trim());
+            }
         }
     }
 }

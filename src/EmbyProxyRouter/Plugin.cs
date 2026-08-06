@@ -1,5 +1,7 @@
 using System;
 using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 using Emby.Web.GenericEdit.Elements;
 using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Patch;
@@ -19,6 +21,16 @@ namespace EmbyProxyRouter
     public class Plugin : BasePluginSimpleUI<PluginOptions>
     {
         private static readonly Guid PluginId = new Guid("5f1c1b6e-9a3d-4d21-8f0a-2b7c6e4d91a3");
+
+        /// <summary>How long saving may block waiting for a reachability verdict.</summary>
+        /// <remarks>
+        /// Deliberately shorter than the probe budget (a TCP timeout plus one HTTP timeout per check
+        /// URL). A reachable proxy answers in well under a second, so the common case is covered,
+        /// while a dead one must not hold the dashboard for the full timeout chain.
+        /// </remarks>
+        private static readonly TimeSpan SaveCheckBudget = TimeSpan.FromSeconds(3);
+
+        private static readonly TimeSpan SaveCheckPoll = TimeSpan.FromMilliseconds(50);
 
         private readonly ILogger _logger;
 
@@ -91,7 +103,58 @@ namespace EmbyProxyRouter
         protected override void OnOptionsSaved(PluginOptions options)
         {
             ProxyRuntime.ApplyOptions(options);
+
+            // Emby renders this very object right after the save: PluginOptionsStore raises
+            // OptionsSaved with the same instance that PluginOptionsPageView hands back as the new
+            // view. So a status written here reaches the page without a reload — it just must not
+            // say "checking", which is what applying options leaves behind until the probe lands.
+            WaitForCheckResult(options);
+
             RefreshStatus(options);
+        }
+
+        /// <summary>
+        /// Briefly blocks the save so the page can show a real verdict instead of "checking".
+        /// </summary>
+        /// <remarks>
+        /// Polls the shared state rather than only awaiting its own call, because
+        /// <see cref="ProxyRuntime.ApplyOptions"/> has already triggered a check and
+        /// <c>CheckNowAsync</c> returns immediately while that one holds the gate. Either probe
+        /// settles the question. Running out of budget is not an error: the periodic check fills the
+        /// status in shortly afterwards, which is exactly the old behaviour.
+        /// </remarks>
+        private void WaitForCheckResult(PluginOptions options)
+        {
+            var checker = ProxyRuntime.HealthChecker;
+            if (checker == null || !options.EnableProxy)
+            {
+                return;
+            }
+
+            try
+            {
+                // Task.Run keeps the blocking wait off any ambient synchronization context.
+                var unused = Task.Run(() => checker.CheckNowAsync(CancellationToken.None));
+
+                var deadline = DateTime.UtcNow + SaveCheckBudget;
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (ProxyRuntime.State.Health != ProxyHealth.Unknown)
+                    {
+                        return;
+                    }
+
+                    Thread.Sleep(SaveCheckPoll);
+                }
+
+                _logger.Debug("Proxy Router: no check result within the save budget; " +
+                              "the page shows 'checking' until the periodic check completes.");
+            }
+            catch (Exception ex)
+            {
+                // Never let this cost the user their settings - they are already written to disk.
+                _logger.ErrorException("Reachability check during save failed.", ex);
+            }
         }
 
         /// <summary>

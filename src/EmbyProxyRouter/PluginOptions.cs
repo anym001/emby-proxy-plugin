@@ -84,15 +84,27 @@ namespace EmbyProxyRouter
 
         [DisplayNameL(nameof(Strings.LabelBypassList), typeof(Strings))]
         [DescriptionL(nameof(Strings.DescBypassList), typeof(Strings))]
-        [EditMultiline(12)]
-        public string BypassList { get; set; } = BypassRules.Defaults;
+        [EditMultiline(6)]
+        public string BypassList { get; set; } = string.Empty;
 
         // ---- Health check -----------------------------------------------------------------------
 
-        [DisplayNameL(nameof(Strings.LabelCheckUrls), typeof(Strings))]
-        [DescriptionL(nameof(Strings.DescCheckUrls), typeof(Strings))]
-        [EditMultiline(4)]
-        public string HealthCheckUrls { get; set; } = ProxyHealthChecker.DefaultUrls;
+        /// <summary>
+        /// Split by scheme rather than offered as a list, because the two probes are not
+        /// interchangeable and both are required.
+        /// </summary>
+        /// <remarks>
+        /// A free-form list would let someone enter two HTTPS URLs and believe the forwarding path
+        /// was covered. Two named fields make that impossible, and they can be validated per scheme.
+        /// Either may be cleared to skip that probe; clearing both leaves the TCP check only.
+        /// </remarks>
+        [DisplayNameL(nameof(Strings.LabelCheckUrlHttp), typeof(Strings))]
+        [DescriptionL(nameof(Strings.DescCheckUrlHttp), typeof(Strings))]
+        public string HealthCheckUrlHttp { get; set; } = ProxyHealthChecker.DefaultHttpUrl;
+
+        [DisplayNameL(nameof(Strings.LabelCheckUrlHttps), typeof(Strings))]
+        [DescriptionL(nameof(Strings.DescCheckUrlHttps), typeof(Strings))]
+        public string HealthCheckUrlHttps { get; set; } = ProxyHealthChecker.DefaultHttpsUrl;
 
         [DisplayNameL(nameof(Strings.LabelCheckInterval), typeof(Strings))]
         [DescriptionL(nameof(Strings.DescCheckInterval), typeof(Strings))]
@@ -125,10 +137,43 @@ namespace EmbyProxyRouter
                 context.AddValidationError(nameof(BypassList), ruleError);
             }
 
+            ValidateCheckUrl(context, nameof(HealthCheckUrlHttp), HealthCheckUrlHttp, "http");
+            ValidateCheckUrl(context, nameof(HealthCheckUrlHttps), HealthCheckUrlHttps, "https");
+
             if (HealthCheckIntervalSeconds < 10)
             {
                 context.AddValidationError(
                     nameof(HealthCheckIntervalSeconds), Localizer.Get("ErrIntervalMin"));
+            }
+        }
+
+        /// <summary>
+        /// Rejects a URL whose scheme does not match the field it was entered in.
+        /// </summary>
+        /// <remarks>
+        /// An HTTPS URL in the HTTP field would silently probe the CONNECT tunnel twice and leave the
+        /// forwarding path unchecked - the exact blind spot the two fields exist to close. Empty is
+        /// allowed and means "skip this probe".
+        /// </remarks>
+        private static void ValidateCheckUrl(
+            ValidationContext context, string field, string value, string expectedScheme)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            Uri url;
+            if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out url))
+            {
+                context.AddValidationError(field, Localizer.Format("HealthInvalidUrl", value.Trim()));
+                return;
+            }
+
+            if (!string.Equals(url.Scheme, expectedScheme, StringComparison.OrdinalIgnoreCase))
+            {
+                context.AddValidationError(
+                    field, Localizer.Format("ErrCheckUrlScheme", expectedScheme + "://"));
             }
         }
     }

@@ -19,18 +19,30 @@ namespace EmbyProxyRouter.Proxy
     public sealed class BypassRules
     {
         /// <summary>
-        /// RFC1918 plus loopback and link-local, plus Emby's own licensing and Connect endpoints.
+        /// Applied unconditionally, on top of whatever the user's list contains.
         /// </summary>
         /// <remarks>
-        /// The Emby hosts are not guesswork. They were read out of the 4.9.5.0 assemblies:
+        /// Two groups, compiled in for the same reason: the README and the settings page promise
+        /// this behaviour, and leaving a promise to an editable default makes it a suggestion.
+        ///
+        /// Private, loopback and link-local ranges — clearing the text box otherwise sent LAN
+        /// traffic (other Emby servers, DLNA endpoints, a local metadata cache) out through a remote
+        /// proxy, and under fail-closed cut the server off from its own network whenever that proxy
+        /// was down. There is no legitimate reason to proxy 127.0.0.0/8.
+        ///
+        /// Emby's licensing and Connect hosts — not guesswork, read out of the 4.9.5.0 assemblies:
         ///   mb3admin.com        — PluginSecurityManager: /admin/service/registration/validate,
         ///                         /admin/service/appstore/register, and the plugin catalog
         ///                         (InstallationManager: www.mb3admin.com/admin/service/package/...)
         ///   connect.emby.media  — Emby.Server.Connect: https://connect.emby.media/service/
-        /// Routing licence traffic through a proxy under a fail-closed policy risks breaking Emby
-        /// Premiere activation, and obscuring licence identity is not what this plugin is for.
+        /// Routing licence traffic through a proxy under fail-closed risks breaking Emby Premiere
+        /// activation, and obscuring licence identity is not what this plugin is for. Fixing them
+        /// here means nobody breaks activation with an edit whose consequence is not obvious.
+        ///
+        /// The trade-off, deliberately accepted: a server whose only route outward is the proxy
+        /// cannot reach these hosts at all. Lifting that would need a code change, not a setting.
         /// </remarks>
-        public const string Defaults =
+        public const string Always =
             "10.0.0.0/8\n" +
             "172.16.0.0/12\n" +
             "192.168.0.0/16\n" +
@@ -52,10 +64,20 @@ namespace EmbyProxyRouter.Proxy
 
         public IReadOnlyList<string> Errors { get; private set; }
 
+        /// <summary>
+        /// Parses the user's list, always on top of <see cref="Always"/>.
+        /// </summary>
+        /// <remarks>
+        /// The fixed entries are merged here rather than at the call sites so that every consumer —
+        /// routing, validation, the disabled state — sees the same rule set. A second Parse overload
+        /// that skipped them would be one refactor away from becoming the one that gets called.
+        /// </remarks>
         public static BypassRules Parse(string text)
         {
             var rules = new BypassRules();
             var errors = new List<string>();
+
+            Add(rules, errors, Always);
 
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -63,6 +85,14 @@ namespace EmbyProxyRouter.Proxy
                 return rules;
             }
 
+            Add(rules, errors, text);
+
+            rules.Errors = errors;
+            return rules;
+        }
+
+        private static void Add(BypassRules rules, List<string> errors, string text)
+        {
             var entries = text.Split(new[] { '\n', '\r', ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (var raw in entries)
             {
@@ -111,9 +141,6 @@ namespace EmbyProxyRouter.Proxy
 
                 rules._exactHosts.Add(entry);
             }
-
-            rules.Errors = errors;
-            return rules;
         }
 
         /// <summary>Returns true when <paramref name="destination"/> must go out directly.</summary>

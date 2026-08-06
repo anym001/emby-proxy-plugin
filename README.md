@@ -75,8 +75,9 @@ Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as use
 | **Username / Password** | Optional. Take precedence over credentials embedded in the URL. |
 | **Ignore certificate validation** | For HTTPS proxies using a self-signed certificate. |
 | **Connect directly when the proxy is unavailable** | Off (default) = fail-closed. On = fail-open. |
-| **Bypass list** | One entry per line: CIDR, single IP, hostname or `*.example.com`. |
-| **Check URLs** | Fetched through the proxy; the first HTTP 2xx response counts as reachable. Empty = TCP check only. |
+| **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Private and link-local networks are compiled in and always bypassed — see below. |
+| **Check URL (HTTP)** | Tests whether the proxy forwards plain HTTP. Must answer 2xx; redirects are not followed and therefore fail. Empty = skip. |
+| **Check URL (HTTPS)** | Tests whether the proxy opens a CONNECT tunnel — the path almost all Emby traffic takes. Both checks must succeed. Both fields empty = TCP check only. |
 | **Check interval** | Seconds between reachability checks, minimum 10. |
 
 ### Fail-closed vs. fail-open
@@ -98,6 +99,26 @@ WARN  Fail-open active - request is going out DIRECTLY, without the proxy: https
 ```
 
 The active policy is shown as its own status line at the top of the settings page.
+
+### What is always bypassed
+
+These are compiled into the plugin and applied on top of whatever the bypass list contains. They
+cannot be removed from the settings page:
+
+```
+10.0.0.0/8   172.16.0.0/12   192.168.0.0/16   127.0.0.0/8   169.254.0.0/16
+::1          fc00::/7        fe80::/10        localhost     *.local
+mb3admin.com   *.mb3admin.com   connect.emby.media
+```
+
+Sending LAN traffic through a remote proxy is never the intent, and under fail-closed an unreachable
+proxy would otherwise cut the server off from its own network. The Emby hosts are fixed for a
+different reason: routing licence traffic through a proxy risks breaking Emby Premiere activation,
+and that is not a consequence anyone should run into by editing a text box. The bypass list on the
+settings page is therefore purely *additional* — it starts empty.
+
+The trade-off is accepted deliberately: on a server whose only route outward is the proxy, these
+hosts become unreachable rather than proxied.
 
 Log messages deliberately contain only scheme, host and port — never the path. Paths and query
 strings of metadata lookups carry title information and frequently API keys.
