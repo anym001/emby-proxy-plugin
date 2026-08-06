@@ -26,33 +26,46 @@ scope by design, not by omission.
 ./build/fetch-emby-refs.sh                                       # once, populates lib/
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
 ./build/verify-patch-target.sh                                   # needs ilspycmd
+./build/verify-single-dll.sh
 ```
 
 Requires .NET SDK 8.0. `lib/*.dll` are proprietary Emby assemblies and are gitignored — never commit
 them, and never commit build output.
 
 **The pinned Emby version lives in `build/emby-version.txt` and nowhere else.** The fetch script and
-both workflows read it. Do not reintroduce a literal default alongside it.
+all workflows read it. Do not reintroduce a literal default alongside it.
 
-CI is two workflows plus Dependabot:
+CI is three workflows plus Dependabot, split on one principle: **verifying a change and shipping a
+deliverable are separate events.** Do not merge them back together.
 
-* `build.yml` — pull requests against `main` plus manual dispatch with an optional `emby-version`
-  input. `inputs.*` is empty on `pull_request`, which is why the version is resolved in a step rather
-  than in `env:`. Also asserts the output stays a single self-contained DLL.
-* `release-check.yml` — finds Emby releases newer than the pinned version and dispatches `build.yml`
+* `ci.yml` — pull requests against `main` plus manual dispatch with an optional `emby-version` input.
+  Lints, compiles, and runs both verify scripts. `inputs.*` is empty on `pull_request`, which is why
+  the version is resolved in a step rather than in `env:`. It uploads a DLL **only on
+  `workflow_dispatch`** — a candidate against a new Emby version is worth having; a pull-request
+  artifact is not. Do not add the upload back to pull requests.
+* `release.yml` — tags matching `v*`, and nothing else. The only workflow that publishes. It repeats
+  CI's verification rather than trusting a pull request ran it, because a tag can sit on any commit.
+  It has **no version input on purpose**: a released DLL must be built against the version the
+  repository claims to support. Needs `contents: write`; publishes with the preinstalled `gh` CLI so
+  it pulls in no third-party action.
+* `release-check.yml` — finds Emby releases newer than the pinned version and dispatches `ci.yml`
   against them. Emby publishes stable (`4.9.x`) and beta (`4.10.0.x`) in parallel, so selection is by
   the `prerelease` flag, never by version order.
 * `.github/dependabot.yml` — grouped monthly updates for the workflow actions, and `Lib.Harmony`.
   Nothing else is a dependency: the Emby assemblies come from the .deb, not from NuGet.
 
+The two `build/verify-*.sh` scripts exist as scripts, not inline steps, because `ci.yml` and
+`release.yml` both run them. Keep new assertions in a script for the same reason: a release must not
+be able to ship an output that a pull request would have rejected.
+
 **Actions are pinned to commit SHAs**, with the version as a trailing comment
 (`actions/checkout@3d3c42e5… # v7.0.1`). Never reintroduce a floating major tag — it can be moved,
-a SHA cannot, and Dependabot is what keeps the pins current. `build.yml` lints the workflows with
-actionlint before it builds; run it locally before pushing a workflow change.
+a SHA cannot, and Dependabot is what keeps the pins current. `ci.yml` lints the workflows with
+actionlint before anything else; run it locally before pushing a workflow change.
 
-**Do not name build artifacts after `github.sha`.** On `pull_request` that is the ephemeral merge
-commit, which belongs to no branch and cannot be resolved after the run. Use
-`github.event.pull_request.head.sha || github.sha`. The build itself keeps running against the merge.
+**Do not name artifacts after `github.sha`.** On `pull_request` that is the ephemeral merge commit,
+which belongs to no branch and cannot be resolved after the run. Use
+`github.event.pull_request.head.sha || github.sha`. The run itself keeps going against the merge.
 
 `build/verify-patch-target.sh` is the check that gives a new-version build meaning: compiling only
 exercises four rarely-changing API assemblies, while the patched method is internal to the server and
@@ -83,8 +96,21 @@ without re-verifying, because each one is load-bearing:
 * **`ProxyState.Decide` is the single routing authority.** The proxy and the gate must never reach
   different verdicts for the same destination. Add routing logic there, not in either caller.
 
-`README.md` documents each of these with the evidence behind it. Keep it in sync when behaviour
+`ARCHITECTURE.md` documents each of these with the evidence behind it. Keep it in sync when behaviour
 changes.
+
+## Where documentation goes
+
+Three files, and the split is deliberate — do not let technical detail drift back into the README:
+
+* **`README.md` is for end users**: what the plugin does and does not do, installing it, the settings
+  table, fail-closed vs. fail-open, known limitations. No decompiled code, no CI internals, no
+  reasoning about .NET handler lifetimes.
+* **`ARCHITECTURE.md` is for anyone reading or changing the code**: the patch target, the verified
+  SOCKS5 behaviour, why the proxy is dynamic and why the gate is a `DelegatingHandler`, localization
+  internals, building from source, and CI.
+* **`CONTRIBUTING.md` is the contributor-facing subset of this file** — the workflow and the traps,
+  not the rationale.
 
 ## Localization
 
@@ -132,5 +158,5 @@ to publish a `:dev` image that a staging instance pulls; the deliverable here is
 `/config/plugins`, so a `dev` branch would carry no artifact and gate nothing. Do not add one, and do
 not point Dependabot at a `target-branch`.
 
-`CONTRIBUTING.md` is the contributor-facing subset of this file. When a convention here changes and
-it affects someone sending a pull request, change it there too.
+When a convention here changes and it affects someone sending a pull request, change it in
+`CONTRIBUTING.md` too.

@@ -19,7 +19,8 @@ documentation.
 
 1. Fork the repository and create a branch from `main`.
 2. Keep each PR focused on a single topic.
-3. Make sure it builds (`build.yml` runs on every PR and also verifies the patch target).
+3. Make sure it passes CI (`ci.yml` runs on every PR: actionlint, a Release build, and the two
+   verification scripts below).
 4. Open a PR and describe what you changed and why.
 
 Before anything else, check the change against **"What this plugin explicitly does NOT do"** in the
@@ -32,6 +33,7 @@ a general-purpose plugin are out of scope by design, not by omission.
 ./build/fetch-emby-refs.sh                                       # once, populates lib/
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
 ./build/verify-patch-target.sh                                   # needs ilspycmd
+./build/verify-single-dll.sh
 ```
 
 There is no test project. **Compiling is not evidence that it works** — the plugin references four
@@ -52,5 +54,5 @@ silently routes nothing.
 - Never commit `lib/*.dll` — they are proprietary Emby binaries — and never commit build output or
   secrets.
 
-`CLAUDE.md` documents the architectural decisions and the traps behind them. It is worth reading
-before a larger change.
+[ARCHITECTURE.md](ARCHITECTURE.md) explains how the plugin hooks into Emby and why it is built that
+way, with the evidence behind each decision. It is worth reading before a larger change.
