@@ -45,6 +45,11 @@ CI is two workflows plus Dependabot:
 * `.github/dependabot.yml` — grouped monthly updates for the workflow actions, and `Lib.Harmony`.
   Nothing else is a dependency: the Emby assemblies come from the .deb, not from NuGet.
 
+**Actions are pinned to commit SHAs**, with the version as a trailing comment
+(`actions/checkout@11d5960… # v4.4.0`). Never reintroduce a floating `@v4` — a tag can be moved,
+a SHA cannot, and Dependabot is what keeps the pins current. `build.yml` lints the workflows with
+actionlint before it builds; run it locally before pushing a workflow change.
+
 **Do not name build artifacts after `github.sha`.** On `pull_request` that is the ephemeral merge
 commit, which belongs to no branch and cannot be resolved after the run. Use
 `github.event.pull_request.head.sha || github.sha`. The build itself keeps running against the merge.

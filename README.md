@@ -154,7 +154,9 @@ The script reports which part changed — the type, the method, or its return ty
 
 Two workflows with different jobs, plus Dependabot.
 
-**`build.yml`** does the same steps as a local build on a runner, then verifies the patch target and
+**`build.yml`** lints the workflows with `actionlint` — a typo in an expression or a step key is
+caught in seconds instead of by a run that took minutes to get there — and in a second job does the
+same steps as a local build on a runner, then verifies the patch target and
 that the output is still a single self-contained DLL — no `0Harmony.dll` next to it, not suspiciously
 small — because that property is what makes deployment a one-file copy and would otherwise break
 silently. The DLL is uploaded as a build artifact, so a plugin binary can be produced without a local
@@ -187,6 +189,10 @@ that goes unnoticed otherwise, because a non-matching Harmony patch fails silent
 Both workflows are `workflow_dispatch`; GitHub only offers the *Run workflow* button for workflows
 present on the default branch, so manual runs work once they are on `main`. `release-check.yml` has a
 weekly `schedule` prepared but commented out.
+
+Every action is pinned to a **commit SHA** with the version in a trailing comment, not to a floating
+tag: a tag can be moved to point at different code, a SHA cannot. That is also what makes the grouped
+Dependabot pull request worth having — it is the mechanism that keeps the pins current.
 
 **Dependabot** (`.github/dependabot.yml`) covers the two dependency surfaces this repository actually
 has. The workflow actions are grouped into a single monthly pull request — they move together, and
