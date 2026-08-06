@@ -51,9 +51,8 @@ is wrong, Emby ignores the file without comment.
 
 Then configure it in the dashboard under **Plugins → Proxy Router**.
 
-A ready-built DLL can be downloaded from the artifacts of a
-[build run](../../actions/workflows/build.yml); building it yourself is described in
-[ARCHITECTURE.md](ARCHITECTURE.md#building).
+A ready-built DLL is attached to every [release](../../releases); building it yourself is described
+in [ARCHITECTURE.md](ARCHITECTURE.md#building).
 
 ### Confirming the patch took effect
 

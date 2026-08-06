@@ -1,8 +1,15 @@
-name: Build
+name: CI
 
+# Everything that answers "is this change sound?" - and nothing that produces a
+# deliverable. Releasing is release.yml's job, on a tag.
+#
+# There is no test project in this repository, so the checks below are what
+# stands in for one: the workflows are linted, the plugin is compiled against
+# the real Emby assemblies, the patched method is asserted to still exist with
+# the expected signature, and the output is asserted to still be one file.
 on:
   # Note: GitHub only offers the "Run workflow" button for workflows that exist
-  # on the default branch, so manual runs are possible once this is on main.
+  # on the default branch. release-check.yml dispatches this workflow by name.
   workflow_dispatch:
     inputs:
       emby-version:
@@ -17,18 +24,18 @@ permissions:
 # Keyed on the Emby version as well, so a run checking a new Emby release does
 # not cancel the one verifying the pinned version.
 concurrency:
-  group: build-${{ github.ref }}-${{ inputs.emby-version }}
+  group: ci-${{ github.ref }}-${{ inputs.emby-version }}
   cancel-in-progress: true
 
 env:
   PROJECT: src/EmbyProxyRouter/EmbyProxyRouter.csproj
 
 jobs:
-  # Static check on the workflows themselves. Everything else in this file only
-  # reports a mistake by failing a run that took minutes to get there; a typo in
-  # an expression or a step key is caught here in seconds. actionlint runs as a
-  # pinned release binary rather than an action, so it has no supply chain of
-  # its own beyond the download.
+  # Static check on the workflows themselves. Everything else here only reports
+  # a mistake by failing a run that took minutes to get there; a typo in an
+  # expression or a step key is caught in seconds. actionlint runs as a pinned
+  # release binary rather than an action, so it has no supply chain of its own
+  # beyond the download.
   lint:
     runs-on: ubuntu-latest
     env:
@@ -44,7 +51,7 @@ jobs:
             | tar -xz actionlint
           ./actionlint -color
 
-  build:
+  verify:
     runs-on: ubuntu-latest
 
     steps:
@@ -56,10 +63,10 @@ jobs:
       #
       # github.sha is not the commit under test on pull_request: it is the
       # ephemeral merge commit GitHub creates for the run, which belongs to no
-      # branch and cannot be looked up once the run is over. The build keeps
+      # branch and cannot be looked up once the run is over. The checks keep
       # running against that merge - testing the merge result is the point of a
-      # pull-request build - but the artifact is named after the commit that was
-      # actually pushed, so it can be traced back to one.
+      # pull-request run - but anything labelled with a commit uses the one that
+      # was actually pushed, so it can be traced back to one.
       - name: Resolve the build inputs
         id: ctx
         run: |
@@ -82,7 +89,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           {
-            echo "### Build"
+            echo "### Verifying"
             echo
             echo "- Emby Server \`$version\`"
             echo "- Commit \`$sha\`"
@@ -110,10 +117,10 @@ jobs:
         run: bash build/fetch-emby-refs.sh "${{ steps.ctx.outputs.version }}"
 
       # The check that actually matters when moving to a new Emby version.
-      # Compiling proves little: the four referenced API assemblies rarely change,
-      # while the patched method is internal to the server and has changed before.
-      # A Harmony postfix that no longer matches never applies - the plugin would
-      # install cleanly and silently route nothing.
+      # Compiling proves little on its own: the four referenced API assemblies
+      # rarely change, while the patched method is internal to the server and has
+      # changed before. A Harmony postfix that no longer matches never applies -
+      # the plugin would install cleanly and silently route nothing.
       - name: Verify the patch target
         run: |
           set -euo pipefail
@@ -130,32 +137,17 @@ jobs:
       - name: Restore
         run: dotnet restore "$PROJECT"
 
-      - name: Build
+      - name: Compile
         run: dotnet build "$PROJECT" -c Release --no-restore
 
-      # The plugin ships as one file: Harmony and the translations are embedded.
-      # If that ever stops being true, the size check below is what notices.
       - name: Verify the output is a single self-contained plugin DLL
-        run: |
-          set -euo pipefail
-          out=src/EmbyProxyRouter/bin/Release
-          dll="$out/EmbyProxyRouter.dll"
-          test -f "$dll" || { echo "::error::$dll was not produced"; exit 1; }
+        run: bash build/verify-single-dll.sh
 
-          if [ -f "$out/0Harmony.dll" ]; then
-            echo "::error::0Harmony.dll was copied next to the plugin; it must stay embedded"
-            exit 1
-          fi
-
-          size=$(stat -c%s "$dll")
-          echo "EmbyProxyRouter.dll: $size bytes"
-          # An unembedded Harmony would drop this well below a megabyte.
-          if [ "$size" -lt 1000000 ]; then
-            echo "::error::plugin DLL is suspiciously small - are the embedded resources missing?"
-            exit 1
-          fi
-
-      - name: Upload plugin
+      # Pull requests verify; they do not publish. A manual run is different: it
+      # is how a candidate against a *new* Emby version gets built, and having
+      # that DLL to try against a real server is the point of starting one.
+      - name: Upload the candidate plugin
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: EmbyProxyRouter-emby${{ steps.ctx.outputs.version }}-${{ steps.ctx.outputs.short_sha }}

@@ -1,0 +1,131 @@
+name: Release
+
+# Builds the deliverable and attaches it to a GitHub Release. This is the only
+# workflow that produces something a user installs, and it runs only on a tag.
+#
+# It repeats CI's verification rather than trusting that a pull request ran it:
+# a tag can be placed on any commit, including one that never went through a
+# pull request. Shipping a plugin whose Harmony patch no longer matches is the
+# one failure mode this project cannot afford, because it is silent - the plugin
+# installs cleanly and routes nothing.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT: src/EmbyProxyRouter/EmbyProxyRouter.csproj
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gh release --generate-notes needs the history to diff against the
+          # previous tag; the default shallow checkout has none.
+          fetch-depth: 0
+
+      # A release is always built against the pinned version. There is no input
+      # to override it: the DLL is handed to users, and the Emby version it was
+      # verified against has to be the one the repository claims to support.
+      - name: Resolve the release inputs
+        id: ctx
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < build/emby-version.txt)"
+          tag="${GITHUB_REF_NAME}"
+
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release $tag"
+            echo
+            echo "- Emby Server \`$version\`"
+            echo "- Commit \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache Emby assemblies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: lib
+          key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
+
+      - name: Fetch Emby assemblies
+        run: bash build/fetch-emby-refs.sh "${{ steps.ctx.outputs.version }}"
+
+      - name: Verify the patch target
+        run: |
+          set -euo pipefail
+          dotnet tool install -g ilspycmd --version 9.1.0.7988
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          bash build/verify-patch-target.sh | tee patch-target.txt
+          {
+            echo "### Patch target"
+            echo '```'
+            cat patch-target.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          dotnet restore "$PROJECT"
+          dotnet build "$PROJECT" -c Release --no-restore
+
+      - name: Verify the output is a single self-contained plugin DLL
+        run: bash build/verify-single-dll.sh
+
+      # gh is preinstalled on GitHub-hosted runners, so publishing needs no
+      # third-party action and no SHA pin of its own.
+      #
+      # The tag may already have a release attached to it (created in the UI
+      # before the tag was pushed, or a re-run of this workflow), so upload to
+      # an existing one instead of failing.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ctx.outputs.tag }}
+          EMBY_VERSION: ${{ steps.ctx.outputs.version }}
+        run: |
+          set -euo pipefail
+          dll=src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll
+
+          cat > notes.md <<EOF
+          Built and verified against **Emby Server ${EMBY_VERSION}**.
+
+          Copy \`EmbyProxyRouter.dll\` into Emby's \`plugins\` folder and restart the
+          server; see the [README](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/README.md#installation-unraid--docker)
+          for the exact steps and the ownership the file needs.
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - uploading the plugin to it"
+            gh release upload "$TAG" "$dll" --clobber
+          else
+            gh release create "$TAG" "$dll" \
+              --title "$TAG" \
+              --notes-file notes.md \
+              --generate-notes
+          fi
+
+          {
+            echo
+            echo "Published to <https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}>"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,8 +1,10 @@
 name: Check Emby Releases
 
 # Finds Emby Server releases newer than the version this repository is pinned to
-# and starts a build against them. That build re-verifies the patch target, which
-# is the thing a new Emby version can actually break.
+# and dispatches ci.yml against them. That run re-verifies the patch target,
+# which is the thing a new Emby version can actually break, and - because it is
+# a manual dispatch rather than a pull request - leaves a candidate DLL as an
+# artifact to try against the new server.
 #
 # Manual for now; uncomment the schedule to have it run by itself. Like every
 # workflow_dispatch workflow, it is only offered in the Actions UI once it is on
@@ -107,18 +109,18 @@ jobs:
           echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
 
-      - name: Start a build against the new release
+      - name: Start a CI run against the new release
         if: steps.versions.outputs.build_version != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_VERSION: ${{ steps.versions.outputs.build_version }}
         run: |
           set -euo pipefail
-          echo "Dispatching a build against Emby $BUILD_VERSION"
+          echo "Dispatching a CI run against Emby $BUILD_VERSION"
           curl -sS --fail-with-body -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/dispatches" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/dispatches" \
             -d "{\"ref\":\"${{ github.ref_name }}\",\"inputs\":{\"emby-version\":\"$BUILD_VERSION\"}}"
 
           {
@@ -126,9 +128,9 @@ jobs:
             echo "### Result"
             echo
             echo "Emby **$BUILD_VERSION** is newer than the pinned **${{ steps.versions.outputs.pinned }}**."
-            echo "A build against it has been started - it re-verifies the patch target."
+            echo "A CI run against it has been started - it re-verifies the patch target."
             echo
-            echo "If that build is green, bump \`build/emby-version.txt\` to adopt the version."
+            echo "If that run is green, bump \`build/emby-version.txt\` to adopt the version."
             echo "If it fails, the plugin needs attention before it can claim to support it."
           } >> "$GITHUB_STEP_SUMMARY"
 

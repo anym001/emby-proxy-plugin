@@ -120,10 +120,12 @@ Requirements: **.NET SDK 8.0** plus `curl`, `ar` and `tar`.
 ```bash
 ./build/fetch-emby-refs.sh                                       # once, populates lib/
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
+./build/verify-single-dll.sh
 ```
 
 Result: `src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll` — a **single** file. Harmony is
 included as an embedded resource and loaded at runtime, so no `0Harmony.dll` is copied alongside it.
+`verify-single-dll.sh` asserts exactly that, and CI and the release workflow run the same script.
 
 ### Why the reference DLLs are not in the repository
 
@@ -158,29 +160,67 @@ The script reports which part changed — the type, the method, or its return ty
 
 ## Continuous integration
 
-Two workflows plus Dependabot.
+Three workflows plus Dependabot, split along one line: **verifying a change and shipping a
+deliverable are separate events.** Pull requests are verified; only a tag ships.
 
-**`build.yml`** lints the workflows with `actionlint` — a typo in an expression or a step key is
-caught in seconds instead of by a run that took minutes to get there — and in a second job does the
-same steps as a local build on a runner, then verifies the patch target and that the output is still
-a single self-contained DLL: no `0Harmony.dll` next to it, not suspiciously small. That property is
-what makes deployment a one-file copy and would otherwise break silently. The DLL is uploaded as a
-build artifact, so a plugin binary can be produced without a local .NET SDK.
+### `ci.yml` — every pull request
 
-It runs on every pull request against `main`, and can be started by hand with an Emby version as
-input. Given none, it uses the pinned `build/emby-version.txt`. The version is also the cache key for
-the fetched assemblies, so only the first run per version pays for the ~180 MB download.
+There is no test project in this repository, so this workflow is what stands in for one. It is not
+"the build" — it never publishes anything — it is the set of assertions that a change is sound:
 
-The artifact is named `EmbyProxyRouter-emby<version>-<commit>`, where the commit is the one that was
-pushed — not `github.sha`. On a pull request that is the throwaway merge commit GitHub creates for the
-run: it belongs to no branch and cannot be resolved once the run is over. The build still runs against
-that merge, because testing the merge result is the point; only the label points at a commit that
-exists.
+* `actionlint` on the workflows. A typo in an expression or a step key is caught in seconds instead
+  of by a run that took minutes to get there.
+* Compiling against the real Emby assemblies. Not much of a test on its own, but the thing that
+  catches a change which simply does not build.
+* `build/verify-patch-target.sh` — the assertion that actually matters (see above).
+* `build/verify-single-dll.sh` — the output is still one self-contained file: no `0Harmony.dll` next
+  to it, not suspiciously small. That property is what makes deployment a one-file copy, and it
+  would otherwise break silently.
 
-**`release-check.yml`** answers the question the pull-request build cannot: *does a newer Emby Server
-release break the plugin?* It reads the Emby release list, compares the newest release against the
-pinned version, and — if a newer one exists — dispatches `build.yml` against it. That build fetches
-that version's assemblies and re-runs the patch-target check.
+The last two are scripts rather than inline steps because `release.yml` runs the same ones. A
+release therefore cannot ship an output that a pull request would have rejected.
+
+It also runs on manual dispatch with an Emby version as input; given none, it uses the pinned
+`build/emby-version.txt`. The version is the cache key for the fetched assemblies, so only the first
+run per version pays for the ~180 MB download.
+
+**Only a manual run uploads a DLL**, named `EmbyProxyRouter-emby<version>-<commit>`. That is the
+`release-check.yml` case: a candidate against a *new* Emby version, worth having in hand to try
+against a real server. Pull requests skip the upload — they are asking whether the change is sound,
+not producing something to install.
+
+The commit in that name is the one that was pushed, not `github.sha`. On a pull request `github.sha`
+is the throwaway merge commit GitHub creates for the run: it belongs to no branch and cannot be
+resolved once the run is over. The checks still run against that merge, because testing the merge
+result is the point; only the label points at a commit that exists.
+
+### `release.yml` — tags matching `v*`
+
+The only workflow that produces something a user installs. It builds against the pinned Emby version
+— deliberately with no override input, because the DLL is handed to users and the version it was
+verified against has to be the one the repository claims to support — and attaches
+`EmbyProxyRouter.dll` to a GitHub Release.
+
+It repeats CI's verification instead of trusting that a pull request ran it. A tag can be placed on
+any commit, including one that never went through a pull request, and shipping a plugin whose Harmony
+patch no longer matches is the one failure this project cannot afford: it is silent. Publishing uses
+the preinstalled `gh` CLI rather than a third-party action, so it adds no supply chain of its own.
+
+Cutting a release is therefore one command:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+If a release already exists for the tag — drafted in the UI beforehand, or the workflow re-run — the
+DLL is uploaded to it instead of the run failing.
+
+### `release-check.yml` — manual, weekly schedule prepared
+
+Answers the question a pull request cannot: *does a newer Emby Server release break the plugin?* It
+reads the Emby release list, compares the newest release against the pinned version, and — if a newer
+one exists — dispatches `ci.yml` against it. That run fetches that version's assemblies, re-runs the
+patch-target check, and leaves a candidate DLL as an artifact.
 
 The two lines Emby publishes in parallel (stable `4.9.x` and beta `4.10.0.x`) are separated by the
 `prerelease` flag rather than by version order, because taking the newest tag would silently track
@@ -191,25 +231,29 @@ A green run means the version can be adopted by bumping `build/emby-version.txt`
 plugin needs attention before it can claim to support that version — which is exactly the failure
 that goes unnoticed otherwise, because a non-matching Harmony patch fails silently rather than loudly.
 
-Both workflows are `workflow_dispatch`; GitHub only offers the *Run workflow* button for workflows
-present on the default branch. `release-check.yml` has a weekly `schedule` prepared but commented out.
+Both this and `ci.yml` are `workflow_dispatch`; GitHub only offers the *Run workflow* button for
+workflows present on the default branch. `release-check.yml` has a weekly `schedule` prepared but
+commented out.
+
+### Pinning and Dependabot
 
 Every action is pinned to a **commit SHA** with the version in a trailing comment, not to a floating
 tag: a tag can be moved to point at different code, a SHA cannot. That is also what makes the grouped
 Dependabot pull request worth having — it is the mechanism that keeps the pins current.
 
-**Dependabot** (`.github/dependabot.yml`) covers the two dependency surfaces this repository actually
-has. The workflow actions are grouped into a single monthly pull request — they move together, and
-separate pull requests would conflict on the same pinned-SHA lines. `Lib.Harmony`, the only NuGet
-dependency, gets its own. Both go through `build.yml` like any other change, which matters most for
-Harmony: it is embedded into the plugin DLL and patches the CLR at runtime, so a bump is verified by
-the patch-target check before it is taken rather than after.
+`.github/dependabot.yml` covers the two dependency surfaces this repository actually has. The
+workflow actions are grouped into a single monthly pull request — they move together, and separate
+pull requests would conflict on the same pinned-SHA lines. `Lib.Harmony`, the only NuGet dependency,
+gets its own. Both go through `ci.yml` like any other change, which matters most for Harmony: it is
+embedded into the plugin DLL and patches the CLR at runtime, so a bump is verified by the
+patch-target check before it is taken rather than after.
 
 ## Project layout
 
 ```
-.github/workflows/build.yml         actionlint + build + patch-target check (pull requests, manual)
-.github/workflows/release-check.yml Finds newer Emby releases, dispatches a build
+.github/workflows/ci.yml            actionlint + compile + the two verify scripts (pull requests)
+.github/workflows/release.yml       Builds and publishes the DLL to a GitHub Release (tags v*)
+.github/workflows/release-check.yml Finds newer Emby releases, dispatches a CI run against them
 .github/dependabot.yml              Updates for the workflow actions and Lib.Harmony
 .github/ISSUE_TEMPLATE/             Bug report, feature request, private security link
 .github/PULL_REQUEST_TEMPLATE.md    Checklist covering the traps in CONTRIBUTING.md
@@ -218,6 +262,7 @@ CONTRIBUTING.md                     How to build, verify and submit a change
 build/emby-version.txt              The pinned Emby version (single source of truth)
 build/fetch-emby-refs.sh            Fetches the Emby assemblies
 build/verify-patch-target.sh        Asserts the patched method still matches
+build/verify-single-dll.sh          Asserts the output is still one self-contained file
 lib/                                Target folder for the assemblies (not committed)
 src/EmbyProxyRouter/
   Plugin.cs                   Entry point, dashboard status, server entry point
