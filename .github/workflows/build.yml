@@ -54,11 +54,16 @@ jobs:
 
       # The reference assemblies are proprietary and deliberately not committed, so
       # every run would otherwise re-download a ~180 MB .deb to keep a few DLLs.
+      #
+      # The fetch script's hash is part of the key on purpose: a cache entry is
+      # immutable, and a hit skips the save. Without it, changing which files the
+      # script keeps would leave an incomplete lib/ cached under a key that keeps
+      # hitting - and every later run would re-download the .deb to fill the gap.
       - name: Cache Emby assemblies
         uses: actions/cache@v4
         with:
           path: lib
-          key: emby-refs-${{ steps.emby.outputs.version }}
+          key: emby-refs-${{ steps.emby.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
 
       - name: Fetch Emby assemblies
         run: bash build/fetch-emby-refs.sh "${{ steps.emby.outputs.version }}"
