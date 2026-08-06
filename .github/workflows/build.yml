@@ -1,17 +1,16 @@
 name: Build
 
-# Manual for now. To have it run on pull requests as well, uncomment the trigger
-# below — the rest of this workflow already works unchanged for that event
-# (see the EMBY_VERSION fallback, which covers events that carry no inputs).
 on:
+  # Note: GitHub only offers the "Run workflow" button for workflows that exist
+  # on the default branch, so manual runs are possible once this is on main.
   workflow_dispatch:
     inputs:
       emby-version:
         description: Emby Server version to take the reference assemblies from
         required: false
         default: "4.9.5.0"
-  # pull_request:
-  #   branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read

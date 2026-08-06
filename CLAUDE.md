@@ -30,9 +30,10 @@ dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
 Requires .NET SDK 8.0. `lib/*.dll` are proprietary Emby assemblies and are gitignored — never commit
 them, and never commit build output.
 
-`.github/workflows/build.yml` runs the same two steps in CI. It is `workflow_dispatch` only for now;
-a `pull_request` trigger is present but commented out. Keep it working for both: read the Emby
-version from `env.EMBY_VERSION`, which falls back to a literal when the event carries no inputs.
+`.github/workflows/build.yml` runs the same two steps in CI, on every pull request against `main` and
+on manual dispatch. Keep it working for both events: read the Emby version from `env.EMBY_VERSION`,
+which falls back to a literal when the event carries no inputs (`inputs.*` is empty on
+`pull_request`).
 
 There is no test project in the repository. Verification during development was done with throwaway
 harnesses (a Python SOCKS5 server plus small console apps referencing the built DLL). If you change
