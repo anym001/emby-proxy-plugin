@@ -53,21 +53,21 @@ namespace EmbyProxyRouter.Proxy
             {
                 if (!settings.Enabled)
                 {
-                    Logger.Info("Proxy Router: deaktiviert - Emby verbindet sich direkt.");
+                    Logger.Info("Proxy Router: disabled - Emby connects directly.");
                 }
                 else if (settings.Endpoint == null)
                 {
-                    Logger.Error("Proxy Router: aktiviert, aber Konfiguration ungültig - " +
-                                 (settings.ConfigError ?? "unbekannter Fehler") +
+                    Logger.Error("Proxy Router: enabled, but the configuration is invalid - " +
+                                 (settings.ConfigError ?? "unknown error") +
                                  (settings.FailOpen
-                                     ? " | Fail-Open: Requests gehen direkt raus."
-                                     : " | Fail-Closed: betroffene Requests werden blockiert."));
+                                     ? " | Fail-open: requests will go out directly."
+                                     : " | Fail-closed: affected requests will be blocked."));
                 }
                 else
                 {
-                    Logger.Info("Proxy Router: aktiviert - " + settings.Endpoint.Describe() +
-                                (settings.FailOpen ? " | Fail-Open" : " | Fail-Closed") +
-                                " | Prüfintervall " + (int)settings.HealthCheckInterval.TotalSeconds + " s");
+                    Logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe() +
+                                (settings.FailOpen ? " | fail-open" : " | fail-closed") +
+                                " | check interval " + (int)settings.HealthCheckInterval.TotalSeconds + " s");
                 }
             }
 

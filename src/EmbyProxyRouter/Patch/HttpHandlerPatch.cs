@@ -36,7 +36,7 @@ namespace EmbyProxyRouter.Patch
     {
         private const string HostTypeName = "Emby.Server.Implementations.ApplicationHost";
         private const string MethodName = "CreateHttpClientHandler";
-        private const string HarmonyId = "de.local.embyproxyrouter";
+        private const string HarmonyId = "org.embyproxyrouter.plugin";
 
         private static ProxyState _state;
         private static DynamicWebProxy _proxy;
@@ -63,7 +63,7 @@ namespace EmbyProxyRouter.Patch
                 IsApplied = false;
                 FailureReason = ex.GetBaseException().Message;
                 logger.ErrorException(
-                    "Harmony-Patch fehlgeschlagen - ausgehender Traffic wird NICHT über den Proxy geleitet.",
+                    "Harmony patch failed - outbound traffic is NOT being routed through the proxy.",
                     ex);
             }
         }
@@ -81,14 +81,14 @@ namespace EmbyProxyRouter.Patch
 
             if (assembly == null)
             {
-                Fail(logger, "Assembly 'Emby.Server.Implementations' ist nicht geladen.");
+                Fail(logger, "Assembly 'Emby.Server.Implementations' is not loaded.");
                 return;
             }
 
             var hostType = assembly.GetType(HostTypeName, throwOnError: false);
             if (hostType == null)
             {
-                Fail(logger, "Typ '" + HostTypeName + "' nicht gefunden in " + assembly.GetName().Name +
+                Fail(logger, "Type '" + HostTypeName + "' not found in " + assembly.GetName().Name +
                              " " + assembly.GetName().Version + ".");
                 return;
             }
@@ -101,8 +101,8 @@ namespace EmbyProxyRouter.Patch
 
             if (candidates.Length == 0)
             {
-                Fail(logger, "Methode '" + MethodName + "' existiert nicht mehr auf " + HostTypeName +
-                             ". Diese Emby-Version wird nicht unterstützt.");
+                Fail(logger, "Method '" + MethodName + "' no longer exists on " + HostTypeName +
+                             ". This Emby version is not supported.");
                 return;
             }
 
@@ -113,8 +113,8 @@ namespace EmbyProxyRouter.Patch
             if (target == null)
             {
                 var found = string.Join(" | ", candidates.Select(Describe));
-                Fail(logger, "Keine passende Überladung von '" + MethodName +
-                             "' gefunden. Vorhanden: " + found);
+                Fail(logger, "No matching overload of '" + MethodName +
+                             "' found. Present: " + found);
                 return;
             }
 
@@ -126,7 +126,7 @@ namespace EmbyProxyRouter.Patch
 
             IsApplied = true;
             FailureReason = null;
-            logger.Info("Harmony-Patch aktiv auf " + Describe(target) +
+            logger.Info("Harmony patch active on " + Describe(target) +
                         " (Emby.Server.Implementations " + assembly.GetName().Version + ").");
         }
 
@@ -141,8 +141,8 @@ namespace EmbyProxyRouter.Patch
         {
             IsApplied = false;
             FailureReason = reason;
-            logger.Error("Harmony-Patch NICHT angewendet: " + reason +
-                         " Ausgehender Traffic wird nicht über den Proxy geleitet.");
+            logger.Error("Harmony patch NOT applied: " + reason +
+                         " Outbound traffic is not being routed through the proxy.");
         }
 
         /// <summary>
@@ -160,7 +160,7 @@ namespace EmbyProxyRouter.Patch
                 // Never let a patch failure break Emby's HTTP stack; leave the handler untouched.
                 if (_logger != null)
                 {
-                    _logger.ErrorException("Proxy konnte nicht auf den HTTP-Handler angewendet werden.", ex);
+                    _logger.ErrorException("The proxy could not be applied to the HTTP handler.", ex);
                 }
             }
         }
@@ -197,14 +197,14 @@ namespace EmbyProxyRouter.Patch
                     legacy.UseProxy = true;
                     if (_logger != null && _state.Settings.Endpoint != null && _state.Settings.Endpoint.IsSocks)
                     {
-                        _logger.Error("Emby lieferte einen HttpClientHandler statt SocketsHttpHandler. " +
-                                      "SOCKS5 wird von diesem Handler-Typ NICHT unterstützt.");
+                        _logger.Error("Emby returned an HttpClientHandler instead of a SocketsHttpHandler. " +
+                                      "SOCKS5 is NOT supported by that handler type.");
                     }
                 }
                 else if (_logger != null)
                 {
-                    _logger.Warn("Unbekannter Handler-Typ '" + handler.GetType().FullName +
-                                 "' - es wird nur die Fail-Closed-Prüfung angewendet.");
+                    _logger.Warn("Unknown handler type '" + handler.GetType().FullName +
+                                 "' - only the fail-closed gate will be applied.");
                 }
             }
 

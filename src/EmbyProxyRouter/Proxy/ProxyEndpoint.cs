@@ -1,5 +1,6 @@
 using System;
 using System.Net;
+using EmbyProxyRouter.Localization;
 
 namespace EmbyProxyRouter.Proxy
 {
@@ -24,7 +25,9 @@ namespace EmbyProxyRouter.Proxy
 
         public string Describe()
         {
-            var auth = Credential == null ? "ohne Auth" : "mit Auth (" + Credential.UserName + ")";
+            var auth = Credential == null
+                ? Localizer.Get("AuthNone")
+                : Localizer.Format("AuthAs", Credential.UserName);
             return Uri.Scheme + "://" + Uri.Host + ":" + Uri.Port + " (" + auth + ")";
         }
 
@@ -55,7 +58,7 @@ namespace EmbyProxyRouter.Proxy
 
             if (string.IsNullOrWhiteSpace(address))
             {
-                error = "Keine Proxy-Adresse konfiguriert.";
+                error = Localizer.Get("ErrNoAddress");
                 return false;
             }
 
@@ -72,14 +75,13 @@ namespace EmbyProxyRouter.Proxy
                 Uri parsed;
                 if (!Uri.TryCreate(address, UriKind.Absolute, out parsed))
                 {
-                    error = "Proxy-Adresse ist keine gültige URL: " + address;
+                    error = Localizer.Format("ErrInvalidUrl", address);
                     return false;
                 }
 
                 if (!TryMapScheme(parsed.Scheme, out scheme))
                 {
-                    error = "Nicht unterstütztes Proxy-Schema '" + parsed.Scheme +
-                            "'. Unterstützt werden http, https und socks5.";
+                    error = Localizer.Format("ErrUnsupportedScheme", parsed.Scheme);
                     return false;
                 }
 
@@ -100,34 +102,33 @@ namespace EmbyProxyRouter.Proxy
                 var colon = address.LastIndexOf(':');
                 if (colon <= 0 || colon == address.Length - 1)
                 {
-                    error = "Proxy-Adresse braucht einen Port, z. B. 192.168.1.10:8080 " +
-                            "oder socks5://192.168.1.10:1080";
+                    error = Localizer.Get("ErrNeedPort");
                     return false;
                 }
 
                 host = address.Substring(0, colon);
                 if (!int.TryParse(address.Substring(colon + 1), out port))
                 {
-                    error = "Proxy-Port ist keine Zahl: " + address.Substring(colon + 1);
+                    error = Localizer.Format("ErrPortNotNumber", address.Substring(colon + 1));
                     return false;
                 }
             }
 
             if (string.IsNullOrWhiteSpace(host))
             {
-                error = "Proxy-Adresse enthält keinen Host.";
+                error = Localizer.Get("ErrNoHost");
                 return false;
             }
 
             if (port < 0)
             {
-                error = "Proxy-Adresse braucht einen expliziten Port.";
+                error = Localizer.Get("ErrNeedExplicitPort");
                 return false;
             }
 
             if (port < 1 || port > 65535)
             {
-                error = "Proxy-Port liegt außerhalb von 1-65535: " + port;
+                error = Localizer.Format("ErrPortRange", port);
                 return false;
             }
 

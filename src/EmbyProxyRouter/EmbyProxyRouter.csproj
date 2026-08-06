@@ -70,6 +70,16 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!--
+    Translations. Any *.json dropped into Localization/ is embedded automatically and becomes
+    selectable — adding a language needs no csproj change, only a matching PluginLanguage entry.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\*.json">
+      <LogicalName>EmbyProxyRouter.Localization.%(Filename).json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <Target Name="VerifyEmbyRefs" BeforeTargets="BeforeBuild">
     <Error Condition="!Exists('$(EmbyLibDir)\MediaBrowser.Controller.dll')"
            Text="Emby reference assemblies not found in '$(EmbyLibDir)'. Run build/fetch-emby-refs.sh first." />

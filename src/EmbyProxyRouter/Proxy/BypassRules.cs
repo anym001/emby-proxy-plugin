@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using EmbyProxyRouter.Localization;
 
 namespace EmbyProxyRouter.Proxy
 {
@@ -98,7 +99,7 @@ namespace EmbyProxyRouter.Proxy
                     var suffix = entry.Substring(2);
                     if (suffix.Length == 0)
                     {
-                        errors.Add("Ungültiger Wildcard-Eintrag: " + entry);
+                        errors.Add(Localizer.Format("ErrInvalidWildcard", entry));
                         continue;
                     }
 
@@ -192,28 +193,28 @@ namespace EmbyProxyRouter.Proxy
                 var parts = entry.Split('/');
                 if (parts.Length != 2)
                 {
-                    error = "Ungültiger CIDR-Eintrag: " + entry;
+                    error = Localizer.Format("ErrInvalidCidr", entry);
                     return false;
                 }
 
                 IPAddress address;
                 if (!IPAddress.TryParse(parts[0].Trim(), out address))
                 {
-                    error = "Ungültige IP-Adresse in: " + entry;
+                    error = Localizer.Format("ErrInvalidIp", entry);
                     return false;
                 }
 
                 int prefix;
                 if (!int.TryParse(parts[1].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out prefix))
                 {
-                    error = "Ungültige Präfixlänge in: " + entry;
+                    error = Localizer.Format("ErrInvalidPrefix", entry);
                     return false;
                 }
 
                 var bytes = address.GetAddressBytes();
                 if (prefix < 0 || prefix > bytes.Length * 8)
                 {
-                    error = "Präfixlänge passt nicht zur Adressfamilie: " + entry;
+                    error = Localizer.Format("ErrPrefixFamily", entry);
                     return false;
                 }
 

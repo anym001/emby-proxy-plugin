@@ -1,47 +1,47 @@
 # Emby Proxy Router
 
-Ein minimalistisches Emby-Server-Plugin mit genau einer Aufgabe: den ausgehenden HTTP(S)-Traffic,
-den der **Emby-Server-Kern selbst** initiiert, über einen konfigurierbaren Proxy zu leiten —
-HTTP, HTTPS oder **SOCKS5** — und dabei private Netze und die Emby-Lizenzserver immer direkt
-anzusprechen.
+A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) traffic that the
+**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5** —
+while always contacting private networks and Emby's licensing servers directly.
 
-Entwickelt und verifiziert gegen **Emby Server 4.9.5.0** (net8.0).
-
----
-
-## Was dieses Plugin tut
-
-* Leitet die HTTP-Clients des Emby-Kerns über einen Proxy: Metadaten-Provider (TMDB, TVDB, …),
-  Remote-Image-Provider, Untertitel-Downloads.
-* Unterstützt **HTTP-, HTTPS- und SOCKS5-Proxies**, umschaltbar per Dropdown oder direkt per
-  URL-Schema (`socks5://host:1080`).
-* Prüft die Erreichbarkeit des Proxys (TCP-Connect + HTTP-Check über den Proxy) und zeigt das
-  Ergebnis im Dashboard an.
-* **Fail-Closed als Standard:** Ist der Proxy nicht erreichbar, werden betroffene Requests
-  abgebrochen und im Log protokolliert — statt still auf eine Direktverbindung zurückzufallen.
-  Fail-Open ist als bewusste Opt-in-Checkbox verfügbar.
-* Routet RFC1918, Loopback, Link-local und die Emby-Lizenz-/Connect-Server immer direkt.
-
-## Was dieses Plugin ausdrücklich NICHT tut
-
-Das ist Absicht — der Sinn des Projekts ist eine einzige, überprüfbare Verantwortlichkeit:
-
-* **Keine** Untertitel-Logik, keine Metadaten-Anreicherung, keine Bild-Verarbeitung.
-* **Kein** Auto-Update-Mechanismus, keine Telemetrie, keine „Phone-Home"-Funktion.
-* **Keine** systemweite Proxy-Konfiguration. Nur Embys eigener HTTP-Stack wird umgeleitet;
-  `ffmpeg`, DLNA, Client-Verbindungen und alles andere bleiben unberührt.
-* **Kein** Proxy für eingehende Verbindungen. Reverse-Proxy-Betrieb ist ein anderes Thema.
-* **Kein** Umgehen der Emby-Lizenzprüfung. Die Lizenzserver stehen bewusst auf der Bypass-Liste.
+Developed and verified against **Emby Server 4.9.5.0** (net8.0).
 
 ---
 
-## Verifizierte Grundlagen (Emby 4.9.5.0)
+## What this plugin does
 
-Die folgenden Punkte sind nicht aus Dokumentation übernommen, sondern durch Dekompilieren der
-offiziellen `emby-server-deb_4.9.5.0_amd64.deb` und durch Laufzeit-Tests auf .NET 8 belegt.
-Sie erklären, warum der Code so aussieht, wie er aussieht.
+* Routes the Emby core's HTTP clients through a proxy: metadata providers (TMDB, TVDB, …),
+  remote image providers, subtitle downloads.
+* Supports **HTTP, HTTPS and SOCKS5 proxies**, selectable via dropdown or directly via URL scheme
+  (`socks5://host:1080`).
+* Checks proxy reachability (TCP connect plus an HTTP check through the proxy) and shows the result
+  in the dashboard.
+* **Fail-closed by default:** if the proxy is unreachable, affected requests are aborted and logged
+  rather than silently falling back to a direct connection. Fail-open is available as a deliberate
+  opt-in checkbox.
+* Always routes RFC1918, loopback, link-local and Emby's licensing/Connect servers directly.
 
-### Der Patch-Zielpunkt
+## What this plugin explicitly does NOT do
+
+This is intentional — the point of the project is a single, auditable responsibility:
+
+* **No** subtitle logic, no metadata enrichment, no image processing.
+* **No** auto-update mechanism, no telemetry, no phone-home behaviour.
+* **No** system-wide proxy configuration. Only Emby's own HTTP stack is redirected; `ffmpeg`, DLNA,
+  client connections and everything else are untouched.
+* **No** proxying of inbound connections. Reverse-proxy operation is a different problem.
+* **No** circumvention of Emby's licence check. The licensing servers are on the bypass list on
+  purpose.
+
+---
+
+## Verified groundwork (Emby 4.9.5.0)
+
+The points below are not taken from documentation. They were established by decompiling the
+official `emby-server-deb_4.9.5.0_amd64.deb` and by runtime tests on .NET 8. They explain why the
+code looks the way it does.
+
+### The patch target
 
 ```csharp
 // Emby.Server.Implementations.ApplicationHost
@@ -53,80 +53,80 @@ protected virtual HttpMessageHandler CreateHttpClientHandler(HttpMessageHandlerO
 }
 ```
 
-* Der **Rückgabetyp ist `HttpMessageHandler`**, nicht `HttpClientHandler`. Ältere Patches gegen
-  diese Methode deklarierten `ref HttpClientHandler __result` — das matcht nicht mehr und ist die
-  wahrscheinliche Ursache für „Mod failed"-Meldungen auf 4.9.x.
-* Die konkrete Host-Klasse `EmbyServer.CoreAppHost` ist `sealed` und überschreibt die Methode
-  **nicht**; der Name kommt in keiner anderen Assembly der Installation vor. Ein Patch auf die
-  Basisdeklaration genügt daher.
-* Zielframework laut `EmbyServer.runtimeconfig.json`: **net8.0**, self-contained auf .NET 8.0.25.
+* The **return type is `HttpMessageHandler`**, not `HttpClientHandler`. Older patches against this
+  method declared `ref HttpClientHandler __result` — that no longer matches, and is the likely cause
+  of "Mod failed" reports on 4.9.x.
+* The concrete host class `EmbyServer.CoreAppHost` is `sealed` and does **not** override the method;
+  the name appears in no other assembly in the install. Patching the base declaration is therefore
+  sufficient.
+* Target framework per `EmbyServer.runtimeconfig.json`: **net8.0**, self-contained on .NET 8.0.25.
 
-### SOCKS5-Machbarkeit
+### SOCKS5 feasibility
 
-`WebProxy`/`HttpClientHandler` können generell kein SOCKS. `SocketsHttpHandler` kann es ab .NET 6 —
-und genau den liefert Emby 4.9.5.0. Empirisch gegen einen echten SOCKS5-Server geprüft:
+`WebProxy`/`HttpClientHandler` cannot speak SOCKS at all. `SocketsHttpHandler` can, from .NET 6
+onwards — and that is exactly what Emby 4.9.5.0 returns. Verified empirically against a real SOCKS5
+server:
 
-| Verhalten | Ergebnis |
+| Behaviour | Result |
 | --- | --- |
-| `socks5://` über eigenes `IWebProxy` auf `SocketsHttpHandler` | funktioniert |
-| `GetProxy()` wird **pro Request** neu aufgerufen | ja — Basis für Konfigurationsänderungen ohne Neustart |
-| Zugangsdaten über `IWebProxy.Credentials` | funktioniert |
-| Zugangsdaten als `socks5://user:pass@host:port` | **wird ignoriert** — .NET bietet dann nur „no authentication" an |
-| Hostname-Auflösung | geht als ATYP=3 an den Proxy (Remote-DNS, kein DNS-Leak) |
+| `socks5://` via a custom `IWebProxy` on `SocketsHttpHandler` | works |
+| `GetProxy()` is called **per request** | yes — the basis for reconfiguration without a restart |
+| Credentials via `IWebProxy.Credentials` | works |
+| Credentials as `socks5://user:pass@host:port` | **ignored** — .NET then offers only "no authentication" |
+| Hostname resolution | sent as ATYP=3 to the proxy (remote DNS, no DNS leak) |
 
-Deshalb zerlegt das Plugin eine eingegebene URL und verschiebt die Zugangsdaten nach
-`IWebProxy.Credentials`. Die URL-Schreibweise bleibt als Eingabeformat erlaubt, führt aber sonst zu
-einer Konfiguration, die authentifiziert aussieht und es nicht ist.
+This is why the plugin takes an entered URL apart and moves the credentials into
+`IWebProxy.Credentials`. The URL form remains accepted as input syntax, but would otherwise produce
+a configuration that looks authenticated and is not.
 
-### Warum ein dynamisches `IWebProxy` statt eines `WebProxy`
+### Why a dynamic `IWebProxy` instead of a `WebProxy`
 
-Zwei Eigenschaften erzwingen das:
+Two properties force it:
 
-* `CoreHttpClientManager` cacht je einen `HttpClient` samt Handler pro
-  `Host + Kompression + Userinfo + Timeout` in einer `ConcurrentDictionary` — **ohne Eviction**.
-* `SocketsHttpHandler` friert seine Properties nach dem ersten Request ein; ein späteres Setzen von
-  `Proxy` wirft `InvalidOperationException`.
+* `CoreHttpClientManager` caches one `HttpClient` and its handler per
+  `host + compression + userinfo + timeout` in a `ConcurrentDictionary` — with **no eviction**.
+* `SocketsHttpHandler` freezes its properties after the first request; assigning `Proxy` later
+  throws `InvalidOperationException`.
 
-Ein statisch zugewiesener Proxy wäre damit bis zum Serverneustart eingefroren. Weil .NET `GetProxy()`
-pro Request aufruft, wirken Änderungen an Adresse, Bypass-Liste und An/Aus dagegen sofort — auch auf
-längst gecachten Handlern.
+A statically assigned proxy would therefore be frozen until the server restarts. Because .NET calls
+`GetProxy()` per request, changes to the address, the bypass list and the on/off switch take effect
+immediately instead — even on long-cached handlers.
 
-### Warum ein `DelegatingHandler` für Fail-Closed
+### Why a `DelegatingHandler` for fail-closed
 
-Ein `IWebProxy` kann nur *einen Proxy wählen* oder `null` zurückgeben — und `null` bedeutet
-„direkt verbinden", also genau das Leck, das Fail-Closed verhindern soll. Das Plugin umhüllt den
-Handler deshalb zusätzlich mit einem `DelegatingHandler`, der einen Request aktiv abweisen kann.
-Das ist unbedenklich, weil `CoreHttpClientManager` das Ergebnis ausschließlich an
-`new HttpClient(handler)` weiterreicht und nirgends castet.
+An `IWebProxy` can only *choose a proxy* or return `null` — and `null` means "connect directly",
+which is precisely the leak fail-closed is meant to prevent. The plugin therefore additionally wraps
+the handler in a `DelegatingHandler` that can actively refuse a request. This is safe because
+`CoreHttpClientManager` only ever passes the result to `new HttpClient(handler)` and never casts it.
 
 ---
 
-## Bauen
+## Building
 
-Voraussetzung: **.NET SDK 8.0** und `curl`, `ar`, `tar`.
+Requirements: **.NET SDK 8.0** plus `curl`, `ar` and `tar`.
 
 ```bash
-git clone <dieses-repo> emby-proxy-plugin
+git clone <this-repo> emby-proxy-plugin
 cd emby-proxy-plugin
 
-# Holt die vier Emby-Referenz-Assemblies (~180 MB Download, nur 4 DLLs bleiben übrig).
+# Fetches the four Emby reference assemblies (~180 MB download, only 4 DLLs are kept).
 ./build/fetch-emby-refs.sh
 
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
 ```
 
-Ergebnis: `src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll` — eine **einzelne** Datei.
-Harmony ist als eingebettete Ressource enthalten und wird zur Laufzeit geladen; es muss also keine
-`0Harmony.dll` mitkopiert werden.
+Result: `src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll` — a **single** file. Harmony is
+included as an embedded resource and loaded at runtime, so no `0Harmony.dll` needs to be copied
+alongside it.
 
-### Warum die Referenz-DLLs nicht im Repo liegen
+### Why the reference DLLs are not in the repository
 
-Es sind proprietäre Emby-Binaries; ihre Weiterverbreitung steht uns nicht zu. Zusätzlich gibt es
-für 4.9.5.0 ohnehin kein passendes NuGet-Paket: `MediaBrowser.Server.Core` endet bei 4.9.1.90, und
-`Emby.Web.GenericEdit` — nötig für die Einstellungsseite — ist überhaupt nicht auf NuGet.
-Das Skript besorgt genau die vier gebrauchten Dateien aus dem offiziellen Release.
+They are proprietary Emby binaries; redistributing them is not ours to do. On top of that, there is
+no matching NuGet package for 4.9.5.0 anyway: `MediaBrowser.Server.Core` stops at 4.9.1.90, and
+`Emby.Web.GenericEdit` — required for the settings page — is not on NuGet at all. The script fetches
+exactly the four files needed from the official release.
 
-Für eine andere Emby-Version:
+For a different Emby version:
 
 ```bash
 FORCE=1 ./build/fetch-emby-refs.sh 4.9.6.0
@@ -136,11 +136,11 @@ FORCE=1 ./build/fetch-emby-refs.sh 4.9.6.0
 
 ## Installation (Unraid / Docker)
 
-Der Emby-Container mappt üblicherweise ein Host-Verzeichnis nach `/config`. Die Plugin-DLL gehört
-in dessen `plugins`-Unterordner.
+The Emby container usually maps a host directory to `/config`. The plugin DLL belongs in its
+`plugins` subfolder.
 
 ```bash
-# Auf dem Unraid-Host, Pfad ggf. anpassen:
+# On the Unraid host; adjust the path if needed:
 PLUGINS=/mnt/user/appdata/emby/plugins
 
 cp EmbyProxyRouter.dll "$PLUGINS/"
@@ -150,127 +150,156 @@ chmod 644   "$PLUGINS/EmbyProxyRouter.dll"
 docker restart emby
 ```
 
-`99:100` ist unter Unraid `nobody:users` — dieselbe UID/GID, unter der der Emby-Container läuft.
-Stimmen die Rechte nicht, ignoriert Emby die Datei kommentarlos.
+`99:100` is `nobody:users` on Unraid — the same UID/GID the Emby container runs as. If the ownership
+is wrong, Emby ignores the file without comment.
 
-Danach im Dashboard unter **Plugins → Proxy Router** konfigurieren.
+Then configure it in the dashboard under **Plugins → Proxy Router**.
 
-### Prüfen, ob der Patch greift
+### Confirming the patch took effect
 
-Die Einstellungsseite zeigt oben eine Zeile **Patch-Status**. Steht dort etwas anderes als
-„Aktiv", wird **kein** Traffic umgeleitet, und der Grund steht direkt daneben. Im Serverlog:
+The settings page shows a **Patch status** line at the top. If it says anything other than "Active",
+**no** traffic is being redirected, and the reason is stated right next to it. In the server log:
 
 ```
-Harmony-Patch aktiv auf HttpMessageHandler ApplicationHost.CreateHttpClientHandler(HttpMessageHandlerOptions) (Emby.Server.Implementations 4.9.5.0).
-Proxy Router: aktiviert - socks5://192.168.1.10:1080 (mit Auth (user)) | Fail-Closed | Prüfintervall 60 s
-Proxy-Status: ERREICHBAR - HTTP-Check über socks5://192.168.1.10:1080 (mit Auth (user)) erfolgreich (...)
+Harmony patch active on HttpMessageHandler ApplicationHost.CreateHttpClientHandler(HttpMessageHandlerOptions) (Emby.Server.Implementations 4.9.5.0).
+Proxy Router: enabled - socks5://192.168.1.10:1080 (auth as user) | fail-closed | check interval 60 s
+Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as user) succeeded (...)
 ```
 
 ---
 
-## Konfiguration
+## Configuration
 
-| Feld | Bedeutung |
+| Field | Meaning |
 | --- | --- |
-| **Proxy aktivieren** | Aus = Emby verhält sich wie ohne das Plugin. |
-| **Proxy-Schema** | `Http`, `Https` oder `Socks5`. Wird nur benutzt, wenn die Adresse kein eigenes Schema mitbringt. |
-| **Proxy-Adresse** | `host:port` (z. B. `192.168.1.10:8080`) oder volle URL (z. B. `socks5://192.168.1.10:1080`). Ein Port ist Pflicht. |
-| **Benutzername / Passwort** | Optional. Haben Vorrang vor Zugangsdaten in der URL. |
-| **Zertifikatsprüfung ignorieren** | Für HTTPS-Proxies mit selbstsigniertem Zertifikat. |
-| **Bei Proxy-Ausfall trotzdem direkt verbinden** | Aus (Standard) = Fail-Closed. Ein = Fail-Open. |
-| **Bypass-Liste** | Ein Eintrag pro Zeile: CIDR, einzelne IP, Hostname oder `*.example.com`. |
-| **Prüf-URLs** | Werden über den Proxy abgerufen; die erste HTTP-2xx-Antwort gilt als „erreichbar". Leer = nur TCP-Check. |
-| **Prüfintervall** | Sekunden zwischen den Erreichbarkeitsprüfungen, mindestens 10. |
+| **Enable proxy** | Off = Emby behaves as if the plugin were not installed. |
+| **Proxy scheme** | `Http`, `Https` or `Socks5`. Only used when the address carries no scheme of its own. |
+| **Proxy address** | `host:port` (e.g. `192.168.1.10:8080`) or a full URL (e.g. `socks5://192.168.1.10:1080`). A port is mandatory. |
+| **Username / Password** | Optional. Take precedence over credentials embedded in the URL. |
+| **Ignore certificate validation** | For HTTPS proxies using a self-signed certificate. |
+| **Connect directly when the proxy is unavailable** | Off (default) = fail-closed. On = fail-open. |
+| **Bypass list** | One entry per line: CIDR, single IP, hostname or `*.example.com`. |
+| **Check URLs** | Fetched through the proxy; the first HTTP 2xx response counts as reachable. Empty = TCP check only. |
+| **Check interval** | Seconds between reachability checks, minimum 10. |
+| **Language** | Language of the settings page: `Auto`, `English` or `Deutsch`. |
 
-### Fail-Closed vs. Fail-Open
+### Languages
 
-**Fail-Closed (Standard).** Ist der Proxy nicht erreichbar — oder noch nicht geprüft, oder
-fehlerhaft konfiguriert — schlagen betroffene Requests fehl. Jeder Fall landet als Warnung im Log:
+The settings page is localized. Translations live in `src/EmbyProxyRouter/Localization/*.json` and
+are embedded into the DLL at build time — there are no loose files to deploy.
+
+`en.json` is the reference language. Any key missing from another file falls back to English key by
+key, so an incomplete translation degrades to mixed language rather than to blank labels. `Auto`
+follows the server process's UI culture and falls back to English when no matching file is shipped.
+
+Labels and descriptions are wired through Emby's own localization attributes
+(`[DisplayNameL(nameof(Strings.X), typeof(Strings))]`) rather than literal strings, which is what
+lets the page switch language immediately on save instead of requiring a restart.
+
+**Adding a language:**
+
+1. Copy `en.json` to `<code>.json` (e.g. `fr.json`) in `src/EmbyProxyRouter/Localization/` and
+   translate the values. Leave the keys untouched.
+2. Add a matching entry to the `PluginLanguage` enum in `Localization/Localizer.cs` and map it in
+   `ResolveCode`.
+3. Rebuild. The file is embedded automatically; the `.csproj` needs no change.
+
+Log messages keep their English prefixes so log lines stay greppable and comparable across
+installations, but detail text embedded in them is localized, because the same text is shown in the
+dashboard.
+
+### Fail-closed vs. fail-open
+
+**Fail-closed (default).** If the proxy is unreachable — or not yet checked, or misconfigured —
+affected requests fail. Every case is logged as a warning:
 
 ```
-WARN  Proxy nicht erreichbar - Request blockiert: https://api.themoviedb.org (Proxy ist nicht erreichbar). Fail-Closed ist aktiv; ...
+WARN  Proxy unreachable - request blocked: https://api.themoviedb.org (proxy is unreachable). Fail-closed is active; ...
 ```
 
-Metadaten-Abrufe schlagen dann fehl, solange der Proxy weg ist. Das ist der Preis dafür, dass nichts
-unbemerkt am Proxy vorbeigeht.
+Metadata lookups will fail for as long as the proxy is gone. That is the price of guaranteeing that
+nothing slips past the proxy unnoticed.
 
-**Fail-Open (Opt-in).** Requests gehen ohne Proxy direkt raus — aber **nie stillschweigend**:
+**Fail-open (opt-in).** Requests go out directly without the proxy — but **never silently**:
 
 ```
-WARN  Fail-Open aktiv - Request geht OHNE Proxy direkt raus: https://api.themoviedb.org (Proxy ist nicht erreichbar)
+WARN  Fail-open active - request is going out DIRECTLY, without the proxy: https://api.themoviedb.org (proxy is unreachable)
 ```
 
-Die aktive Betriebsart wird oben auf der Einstellungsseite als eigene Statuszeile angezeigt.
+The active policy is shown as its own status line at the top of the settings page.
 
-In den Log-Meldungen stehen bewusst nur Schema, Host und Port — nicht der Pfad. Pfade und
-Query-Strings von Metadaten-Abfragen enthalten Titelinformationen und häufig API-Schlüssel.
+Log messages deliberately contain only scheme, host and port — never the path. Paths and query
+strings of metadata lookups carry title information and frequently API keys.
 
-### Bypass-Standardliste
+### Default bypass list
 
-RFC1918, Loopback und Link-local, dazu die Emby-eigenen Endpunkte. Letztere sind nicht geraten,
-sondern aus den 4.9.5.0-Assemblies gelesen:
+RFC1918, loopback and link-local, plus Emby's own endpoints. The latter are not guesswork; they were
+read out of the 4.9.5.0 assemblies:
 
-* `mb3admin.com` — `PluginSecurityManager`: `/admin/service/registration/validate` und
-  `/admin/service/appstore/register`; außerdem der Plugin-Katalog in `InstallationManager`
+* `mb3admin.com` — `PluginSecurityManager`: `/admin/service/registration/validate` and
+  `/admin/service/appstore/register`; plus the plugin catalogue in `InstallationManager`
   (`www.mb3admin.com/admin/service/package/...`).
 * `connect.emby.media` — `Emby.Server.Connect`: `https://connect.emby.media/service/`.
 
-Lizenz-Traffic unter einer Fail-Closed-Policy durch einen Proxy zu schicken, riskiert die
-Emby-Premiere-Aktivierung; das Verschleiern der Lizenz-Identität ist außerdem nicht der Zweck
-dieses Plugins. Wer das anders will, kann die Zeilen aus der Liste entfernen.
+Sending licence traffic through a proxy under a fail-closed policy risks breaking Emby Premiere
+activation, and obscuring licence identity is not what this plugin is for. Remove the lines if you
+disagree.
 
 ---
 
-## Bekannte Grenzen
+## Known limitations
 
-* **Live TV ist nur teilweise erfasst.** `Emby.LiveTV.dll` benutzt sowohl den zentralen
-  `IHttpClient` (wird umgeleitet) als auch eigene `HttpClientHandler`-Instanzen (werden **nicht**
-  umgeleitet). Wer Live TV nutzt, sollte nicht annehmen, dass dieser Traffic vollständig über den
-  Proxy läuft. Eine Sonderbehandlung dafür ist bewusst nicht eingebaut.
-* **Die Bypass-Liste löst kein DNS auf.** Hostnamen werden literal verglichen, IP-Regeln greifen nur
-  bei IP-Literalen. Eine Auflösung würde für jeden Request eine DNS-Abfrage nach außen erzeugen —
-  genau die Sichtbarkeit, die das Plugin vermeiden soll.
-* **Proxy-Authentifizierung bei HTTP(S) läuft reaktiv.** .NET sendet die Zugangsdaten erst, nachdem
-  der Proxy mit `407` geantwortet hat, nicht präemptiv. Proxies, die ohne Challenge sofort
-  ablehnen, funktionieren nicht.
-* **„Zertifikatsprüfung ignorieren" wirkt breit.** Die Option deaktiviert die TLS-Prüfung für die
-  Verbindung zum Proxy *und* für die darüber getunnelten Zielverbindungen. Nur einschalten, wenn
-  der Proxy ein selbstsigniertes Zertifikat verwendet.
-* **Zugangsdaten liegen im Klartext.** Emby speichert Plugin-Optionen als JSON unter
-  `/config/plugins/configurations/`. Das Passwortfeld ist in der UI maskiert, in der Datei nicht.
-* **Bindung an eine interne Emby-Methode.** `CreateHttpClientHandler` ist kein öffentliches API. Ein
-  Emby-Update kann es jederzeit ändern. Das Plugin prüft die Signatur beim Start und meldet
-  Abweichungen deutlich, statt still nichts zu tun — aber es kann sie nicht reparieren.
-* **Requests vor dem ersten Health-Check.** Unter Fail-Closed werden Requests blockiert, bis die
-  erste Prüfung durch ist. Das ist so gewollt: eine unbestätigte Proxy-Verfügbarkeit ist kein Grund,
-  Traffic durchzulassen.
+* **Live TV is only partially covered.** `Emby.LiveTV.dll` uses both the central `IHttpClient`
+  (which is redirected) and its own `HttpClientHandler` instances (which are **not**). If you use
+  Live TV, do not assume that traffic goes through the proxy in full. Special handling for it is
+  deliberately not built in.
+* **The bypass list performs no DNS resolution.** Hostnames are matched literally and IP rules only
+  apply to IP literals. Resolving would emit a DNS lookup for every request — exactly the visibility
+  the plugin exists to avoid.
+* **HTTP(S) proxy authentication is reactive.** .NET sends credentials only after the proxy answers
+  `407`, not pre-emptively. Proxies that reject outright without issuing a challenge will not work.
+* **"Ignore certificate validation" is broad.** The option disables TLS validation both for the
+  connection to the proxy *and* for the destination connections tunnelled through it. Only enable it
+  when the proxy uses a self-signed certificate.
+* **Credentials are stored in plain text.** Emby persists plugin options as JSON under
+  `/config/plugins/configurations/`. The password field is masked in the UI, not in the file.
+* **Bound to an internal Emby method.** `CreateHttpClientHandler` is not public API. An Emby update
+  can change it at any time. The plugin verifies the signature at startup and reports a mismatch
+  loudly instead of silently doing nothing — but it cannot repair one.
+* **Requests before the first health check.** Under fail-closed, requests are blocked until the
+  first check completes. That is intended: unconfirmed proxy availability is not a reason to let
+  traffic through.
 
 ---
 
-## Projektstruktur
+## Project layout
 
 ```
-build/fetch-emby-refs.sh      Holt die Emby-Referenz-Assemblies
-lib/                          Zielordner dafür (nicht eingecheckt)
+build/fetch-emby-refs.sh      Fetches the Emby reference assemblies
+lib/                          Target folder for them (not committed)
 src/EmbyProxyRouter/
-  Plugin.cs                   Einstiegspunkt, Dashboard-Status, Entry Point
-  PluginOptions.cs            Einstellungsseite (Emby.Web.GenericEdit)
-  Patch/HarmonyLoader.cs      Lädt das eingebettete Harmony
-  Patch/HttpHandlerPatch.cs   Der Postfix-Patch inkl. Signaturprüfung
-  Proxy/ProxyEndpoint.cs      Adress-Parsing, Credential-Umzug
-  Proxy/BypassRules.cs        CIDR-/Host-Matching
-  Proxy/ProxySettings.cs      Unveränderlicher Konfigurations-Snapshot
-  Proxy/ProxyState.cs         Routing-Entscheidung an einer Stelle
-  Proxy/DynamicWebProxy.cs    IWebProxy, pro Request befragt
-  Proxy/ProxyGateHandler.cs   Fail-Closed-Durchsetzung, Logging
-  Proxy/ProxyHealthChecker.cs Erreichbarkeitsprüfung
-  Proxy/ProxyRuntime.cs       Zusammenhalt der Singletons
+  Plugin.cs                   Entry point, dashboard status, server entry point
+  PluginOptions.cs            Settings page (Emby.Web.GenericEdit)
+  Localization/en.json        Reference language (every key must exist here)
+  Localization/de.json        German translation
+  Localization/Localizer.cs   Language resolution and JSON lookup
+  Localization/Strings.cs     Static properties consumed by Emby's localization attributes
+  Patch/HarmonyLoader.cs      Loads the embedded Harmony assembly
+  Patch/HttpHandlerPatch.cs   The postfix patch, including signature verification
+  Proxy/ProxyEndpoint.cs      Address parsing, credential relocation
+  Proxy/BypassRules.cs        CIDR and host matching
+  Proxy/ProxySettings.cs      Immutable configuration snapshot
+  Proxy/ProxyState.cs         Routing decision, in one place
+  Proxy/DynamicWebProxy.cs    IWebProxy, consulted per request
+  Proxy/ProxyGateHandler.cs   Fail-closed enforcement and logging
+  Proxy/ProxyHealthChecker.cs Reachability checking
+  Proxy/ProxyRuntime.cs       Holds the singletons together
 ```
 
-## Lizenz
+## Licence
 
-GPL-3.0 — siehe [LICENSE](LICENSE).
+GPL-3.0 — see [LICENSE](LICENSE).
 
-Das Funktionsprinzip (Harmony-Postfix auf Embys interne Handler-Fabrik) ist inspiriert von
-[StrmAssistant](https://github.com/sjtuross/StrmAssistant) (GPL-3.0). Der Code hier ist eigenständig
-geschrieben; die Lizenz wird aus Respekt vor dieser Herkunft übernommen.
+The operating principle (a Harmony postfix on Emby's internal handler factory) is inspired by
+[StrmAssistant](https://github.com/sjtuross/StrmAssistant) (GPL-3.0). The code here was written
+independently; the licence is adopted out of respect for that origin.

@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using Emby.Web.GenericEdit.Elements;
+using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Patch;
 using EmbyProxyRouter.Proxy;
 using MediaBrowser.Common;
@@ -29,8 +30,11 @@ namespace EmbyProxyRouter
 
             try
             {
+                var options = GetOptions();
+                Localizer.SetLanguage(options.Language);
+
                 ProxyRuntime.Initialize(_logger);
-                ProxyRuntime.ApplyOptions(GetOptions());
+                ProxyRuntime.ApplyOptions(options);
 
                 // Patch from the constructor rather than from the entry point. Emby creates handlers
                 // lazily and then caches them per host forever, so any handler built before the patch
@@ -41,7 +45,7 @@ namespace EmbyProxyRouter
             {
                 // A throwing constructor would take the whole plugin out of the dashboard, leaving
                 // no way to see what went wrong.
-                _logger.ErrorException("Proxy Router konnte nicht initialisiert werden.", ex);
+                _logger.ErrorException("Proxy Router failed to initialise.", ex);
             }
         }
 
@@ -56,8 +60,8 @@ namespace EmbyProxyRouter
         {
             get
             {
-                return "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns über einen HTTP-, HTTPS- " +
-                       "oder SOCKS5-Proxy. Private Netze werden immer direkt geroutet.";
+                return "Routes outbound HTTP(S) traffic from the Emby core through an HTTP, HTTPS " +
+                       "or SOCKS5 proxy. Private networks are always routed directly.";
             }
         }
 
@@ -73,6 +77,7 @@ namespace EmbyProxyRouter
 
         protected override PluginOptions OnBeforeShowUI(PluginOptions options)
         {
+            Localizer.SetLanguage(options.Language);
             RefreshStatus(options);
 
             // Kick off a check in the background so the next page load is current, without making
@@ -87,6 +92,8 @@ namespace EmbyProxyRouter
 
         protected override void OnOptionsSaved(PluginOptions options)
         {
+            // Language first: the status lines built below must already be in the new language.
+            Localizer.SetLanguage(options.Language);
             ProxyRuntime.ApplyOptions(options);
             RefreshStatus(options);
         }
@@ -105,8 +112,8 @@ namespace EmbyProxyRouter
                 options.PatchStatus = new StatusItem
                 {
                     Status = ItemStatus.Succeeded,
-                    Caption = "Patch",
-                    StatusText = "Aktiv - Emby-Kern-Traffic läuft über dieses Plugin."
+                    Caption = Localizer.Get("PatchCaption"),
+                    StatusText = Localizer.Get("PatchActive")
                 };
             }
             else
@@ -114,9 +121,10 @@ namespace EmbyProxyRouter
                 options.PatchStatus = new StatusItem
                 {
                     Status = ItemStatus.Failed,
-                    Caption = "Patch",
-                    StatusText = "NICHT aktiv - " + (HttpHandlerPatch.FailureReason ?? "unbekannter Fehler") +
-                                 " Es wird kein Traffic umgeleitet."
+                    Caption = Localizer.Get("PatchCaption"),
+                    StatusText = Localizer.Format(
+                        "PatchInactive",
+                        HttpHandlerPatch.FailureReason ?? Localizer.Get("UnknownError"))
                 };
             }
 
@@ -124,16 +132,14 @@ namespace EmbyProxyRouter
                 ? new StatusItem
                 {
                     Status = ItemStatus.Warning,
-                    Caption = "Fail-Open",
-                    StatusText = "Bei Proxy-Ausfall gehen Requests OHNE Proxy direkt ins Internet " +
-                                 "(wird als Warnung geloggt)."
+                    Caption = Localizer.Get("FailOpenCaption"),
+                    StatusText = Localizer.Get("FailOpenText")
                 }
                 : new StatusItem
                 {
                     Status = ItemStatus.Succeeded,
-                    Caption = "Fail-Closed",
-                    StatusText = "Bei Proxy-Ausfall werden betroffene Requests blockiert. " +
-                                 "Kein stiller Rückfall auf Direktverbindung."
+                    Caption = Localizer.Get("FailClosedCaption"),
+                    StatusText = Localizer.Get("FailClosedText")
                 };
 
             if (state == null || !options.EnableProxy)
@@ -141,16 +147,17 @@ namespace EmbyProxyRouter
                 options.ProxyStatus = new StatusItem
                 {
                     Status = ItemStatus.Unavailable,
-                    Caption = "Deaktiviert",
-                    StatusText = "Der Proxy ist ausgeschaltet; Emby verbindet sich direkt."
+                    Caption = Localizer.Get("DisabledCaption"),
+                    StatusText = Localizer.Get("DisabledText")
                 };
                 return;
             }
 
-            var detail = state.LastCheckDetail ?? "Noch nicht geprüft";
+            var detail = state.LastCheckDetail ?? Localizer.Get("NotCheckedYet");
             var age = state.LastCheckUtc.HasValue
-                ? " (Stand: vor " +
-                  Math.Max(0, (int)(DateTime.UtcNow - state.LastCheckUtc.Value).TotalSeconds) + " s)"
+                ? Localizer.Format(
+                    "AgeSuffix",
+                    Math.Max(0, (int)(DateTime.UtcNow - state.LastCheckUtc.Value).TotalSeconds))
                 : string.Empty;
 
             switch (state.Health)
@@ -159,7 +166,7 @@ namespace EmbyProxyRouter
                     options.ProxyStatus = new StatusItem
                     {
                         Status = ItemStatus.Succeeded,
-                        Caption = "Erreichbar",
+                        Caption = Localizer.Get("ReachableCaption"),
                         StatusText = detail + age
                     };
                     break;
@@ -168,11 +175,11 @@ namespace EmbyProxyRouter
                     options.ProxyStatus = new StatusItem
                     {
                         Status = ItemStatus.Failed,
-                        Caption = "Nicht erreichbar",
-                        StatusText = detail + age +
-                                     (options.AllowDirectWhenProxyUnavailable
-                                         ? " - Requests gehen aktuell direkt raus."
-                                         : " - Requests werden aktuell blockiert.")
+                        Caption = Localizer.Get("UnreachableCaption"),
+                        StatusText = detail + age + Localizer.Get(
+                                         options.AllowDirectWhenProxyUnavailable
+                                             ? "UnreachableSuffixFailOpen"
+                                             : "UnreachableSuffixFailClosed")
                     };
                     break;
 
@@ -180,11 +187,11 @@ namespace EmbyProxyRouter
                     options.ProxyStatus = new StatusItem
                     {
                         Status = ItemStatus.InProgress,
-                        Caption = "Wird geprüft",
-                        StatusText = "Noch kein Prüfergebnis." +
-                                     (options.AllowDirectWhenProxyUnavailable
-                                         ? " Bis dahin gehen Requests direkt raus."
-                                         : " Bis dahin werden betroffene Requests blockiert.")
+                        Caption = Localizer.Get("CheckingCaption"),
+                        StatusText = Localizer.Get(
+                            options.AllowDirectWhenProxyUnavailable
+                                ? "CheckingTextFailOpen"
+                                : "CheckingTextFailClosed")
                     };
                     break;
             }
@@ -218,13 +225,13 @@ namespace EmbyProxyRouter
                 }
 
                 ProxyRuntime.HealthChecker.Start();
-                _logger.Info("Proxy Router: Erreichbarkeitsprüfung gestartet, Intervall " +
+                _logger.Info("Proxy Router: reachability checks started, interval " +
                              ((int)ProxyRuntime.State.Settings.HealthCheckInterval.TotalSeconds)
                              .ToString(CultureInfo.InvariantCulture) + " s.");
             }
             catch (Exception ex)
             {
-                _logger.ErrorException("Erreichbarkeitsprüfung konnte nicht gestartet werden.", ex);
+                _logger.ErrorException("Reachability checks could not be started.", ex);
             }
         }
 

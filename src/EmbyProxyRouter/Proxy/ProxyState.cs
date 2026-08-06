@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using EmbyProxyRouter.Localization;
 
 namespace EmbyProxyRouter.Proxy
 {
@@ -56,7 +57,7 @@ namespace EmbyProxyRouter.Proxy
             // the next check succeeds, rather than trusting a result from the old configuration.
             Volatile.Write(ref _health, (int)ProxyHealth.Unknown);
             LastCheckUtc = null;
-            LastCheckDetail = "Noch nicht geprüft";
+            LastCheckDetail = Localizer.Get("NotCheckedYet");
         }
 
         /// <summary>Returns true when the health value changed.</summary>
@@ -91,7 +92,7 @@ namespace EmbyProxyRouter.Proxy
 
             if (!settings.Enabled)
             {
-                reason = "Proxy ist deaktiviert";
+                reason = Localizer.Get("ReasonDisabled");
                 return RouteDecision.Direct;
             }
 
@@ -100,26 +101,26 @@ namespace EmbyProxyRouter.Proxy
                 // Enabled but misconfigured. Under fail-closed this is not a reason to quietly send
                 // everything in the clear — that is precisely the silent-fallback behaviour this
                 // plugin is meant to avoid.
-                reason = "Proxy ist aktiviert, aber fehlerhaft konfiguriert" +
+                reason = Localizer.Get("ReasonMisconfigured") +
                          (settings.ConfigError != null ? ": " + settings.ConfigError : string.Empty);
                 return settings.FailOpen ? RouteDecision.Direct : RouteDecision.Blocked;
             }
 
             if (settings.Bypass.IsBypassed(destination))
             {
-                reason = "Ziel steht auf der Bypass-Liste";
+                reason = Localizer.Get("ReasonBypassed");
                 return RouteDecision.Direct;
             }
 
             if (Health == ProxyHealth.Reachable)
             {
-                reason = "Proxy ist erreichbar";
+                reason = Localizer.Get("ReasonReachable");
                 return RouteDecision.ViaProxy;
             }
 
-            reason = Health == ProxyHealth.Unknown
-                ? "Proxy-Status ist noch nicht geprüft"
-                : "Proxy ist nicht erreichbar";
+            reason = Localizer.Get(Health == ProxyHealth.Unknown
+                ? "ReasonNotChecked"
+                : "ReasonUnreachable");
             return settings.FailOpen ? RouteDecision.Direct : RouteDecision.Blocked;
         }
     }

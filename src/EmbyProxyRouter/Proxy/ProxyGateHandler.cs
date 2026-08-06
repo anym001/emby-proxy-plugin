@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbyProxyRouter.Localization;
 using MediaBrowser.Model.Logging;
 
 namespace EmbyProxyRouter.Proxy
@@ -67,9 +68,7 @@ namespace EmbyProxyRouter.Proxy
             switch (decision)
             {
                 case RouteDecision.Blocked:
-                    var message = "Proxy nicht erreichbar - Request blockiert: " + Redact(uri) +
-                                  " (" + reason + "). Fail-Closed ist aktiv; " +
-                                  "Option 'Bei Proxy-Ausfall trotzdem direkt verbinden' ist ausgeschaltet.";
+                    var message = Localizer.Format("BlockedMessage", Redact(uri), reason);
                     _logger.Warn(message);
                     return new HttpRequestException(message);
 
@@ -79,9 +78,7 @@ namespace EmbyProxyRouter.Proxy
                     var settings = _state.Settings;
                     if (settings.Enabled && !settings.Bypass.IsBypassed(uri))
                     {
-                        _logger.Warn(
-                            "Fail-Open aktiv - Request geht OHNE Proxy direkt raus: " + Redact(uri) +
-                            " (" + reason + ")");
+                        _logger.Warn(Localizer.Format("FailOpenMessage", Redact(uri), reason));
                     }
                     return null;
 

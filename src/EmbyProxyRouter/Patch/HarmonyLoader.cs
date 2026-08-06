@@ -62,8 +62,8 @@ namespace EmbyProxyRouter.Patch
                     {
                         if (stream == null)
                         {
-                            logger.Error("Eingebettete Harmony-Ressource '" + ResourceName +
-                                         "' nicht gefunden - der Patch kann nicht angewendet werden.");
+                            logger.Error("Embedded Harmony resource '" + ResourceName +
+                                         "' not found - the patch cannot be applied.");
                             return null;
                         }
 
@@ -72,7 +72,7 @@ namespace EmbyProxyRouter.Patch
                             stream.CopyTo(buffer);
                             var loaded = Assembly.Load(buffer.ToArray());
                             Volatile.Write(ref _harmony, loaded);
-                            logger.Debug("Harmony aus eingebetteter Ressource geladen: " +
+                            logger.Debug("Harmony loaded from embedded resource: " +
                                          loaded.FullName);
                             return loaded;
                         }
@@ -80,7 +80,7 @@ namespace EmbyProxyRouter.Patch
                 }
                 catch (Exception ex)
                 {
-                    logger.ErrorException("Harmony konnte nicht geladen werden.", ex);
+                    logger.ErrorException("Harmony could not be loaded.", ex);
                     return null;
                 }
             };
