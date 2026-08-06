@@ -1,0 +1,36 @@
+version: 2
+
+# Both ecosystems open pull requests against main, where build.yml runs them
+# through the full check - fetch, patch-target verification, build, single-DLL
+# assertion. A dependency bump is therefore verified the same way a code change
+# is, which is the only reason automating it is safe here.
+
+updates:
+  # The actions used by build.yml and release-check.yml. GitHub already reports
+  # that checkout, setup-dotnet, cache and upload-artifact v4 target the
+  # deprecated Node 20 runtime and are being forced onto Node 24; this is what
+  # keeps the eventual v5 bump from having to be noticed by hand.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    # One pull request for all of them. They move together in practice, and each
+    # separate pull request costs a full build run to verify.
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+
+  # Lib.Harmony is the only NuGet dependency, and it is embedded into the plugin
+  # DLL rather than shipped next to it, so a bump changes the artifact itself
+  # rather than just a reference. It also patches the CLR at runtime, which is
+  # the part of this plugin with the least margin for a silent regression - the
+  # build's patch-target check is what has to pass before such a bump is taken.
+  - package-ecosystem: nuget
+    directory: "/src/EmbyProxyRouter"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: build

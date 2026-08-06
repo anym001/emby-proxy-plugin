@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest an improvement to the plugin
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This plugin has a deliberately narrow scope: routing the Emby core's
+        outbound HTTP(S) traffic through a proxy, and blocking it when the proxy
+        is unavailable. Please check "What this plugin explicitly does NOT do"
+        in the README first — several omissions are decisions, not gaps.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem would this solve? What's the use case?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Why this belongs in a proxy-routing plugin
+      description: What ties the request to routing outbound traffic, rather than to a general-purpose Emby plugin?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

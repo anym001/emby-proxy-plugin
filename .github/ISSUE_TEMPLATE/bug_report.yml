@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a problem with the Emby Proxy Router plugin
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report.
+
+        **Before pasting logs or a proxy address, redact them.** Emby's request
+        URLs carry API keys in their query strings and title information in
+        their paths, and a proxy URL may contain a username and password. The
+        plugin itself logs only scheme, host and port for this reason — please
+        keep it that way in the report.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: emby-version
+    attributes:
+      label: Emby Server version
+      description: Dashboard → About. The plugin is developed against the version pinned in build/emby-version.txt.
+      placeholder: "e.g. 4.9.5.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: proxy-type
+    attributes:
+      label: Proxy type
+      options:
+        - SOCKS5
+        - HTTP
+        - HTTPS
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Routing (requests do not go through the proxy)
+        - Fail-closed / fail-open behaviour
+        - Bypass list (private networks, custom entries)
+        - Health check / status display
+        - Settings page or its translations
+        - Installation / plugin does not load
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Plugin settings
+      description: Proxy type, whether authentication is used, fail-open on or off, and any custom bypass entries. Do not paste credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Emby log output
+      description: Lines mentioning ProxyRouter or the Harmony patch. Redact API keys, titles and credentials.
+      render: shell

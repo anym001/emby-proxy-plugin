@@ -34,7 +34,7 @@ them, and never commit build output.
 **The pinned Emby version lives in `build/emby-version.txt` and nowhere else.** The fetch script and
 both workflows read it. Do not reintroduce a literal default alongside it.
 
-CI is two workflows:
+CI is two workflows plus Dependabot:
 
 * `build.yml` — pull requests against `main` plus manual dispatch with an optional `emby-version`
   input. `inputs.*` is empty on `pull_request`, which is why the version is resolved in a step rather
@@ -42,6 +42,17 @@ CI is two workflows:
 * `release-check.yml` — finds Emby releases newer than the pinned version and dispatches `build.yml`
   against them. Emby publishes stable (`4.9.x`) and beta (`4.10.0.x`) in parallel, so selection is by
   the `prerelease` flag, never by version order.
+* `.github/dependabot.yml` — grouped monthly updates for the workflow actions, and `Lib.Harmony`.
+  Nothing else is a dependency: the Emby assemblies come from the .deb, not from NuGet.
+
+**Actions are pinned to commit SHAs**, with the version as a trailing comment
+(`actions/checkout@3d3c42e5… # v7.0.1`). Never reintroduce a floating major tag — it can be moved,
+a SHA cannot, and Dependabot is what keeps the pins current. `build.yml` lints the workflows with
+actionlint before it builds; run it locally before pushing a workflow change.
+
+**Do not name build artifacts after `github.sha`.** On `pull_request` that is the ephemeral merge
+commit, which belongs to no branch and cannot be resolved after the run. Use
+`github.event.pull_request.head.sha || github.sha`. The build itself keeps running against the merge.
 
 `build/verify-patch-target.sh` is the check that gives a new-version build meaning: compiling only
 exercises four rarely-changing API assemblies, while the patched method is internal to the server and
@@ -115,3 +126,11 @@ key by key.
 ## Git
 
 Work on the branch specified for the task. Do not open a pull request unless explicitly asked.
+
+The repository is **`main`-only** — no `dev` branch, unlike `pocketlog`/`healthlog`. Those use `dev`
+to publish a `:dev` image that a staging instance pulls; the deliverable here is a DLL copied into
+`/config/plugins`, so a `dev` branch would carry no artifact and gate nothing. Do not add one, and do
+not point Dependabot at a `target-branch`.
+
+`CONTRIBUTING.md` is the contributor-facing subset of this file. When a convention here changes and
+it affects someone sending a pull request, change it there too.
