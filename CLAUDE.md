@@ -43,6 +43,10 @@ CI is two workflows:
   against them. Emby publishes stable (`4.9.x`) and beta (`4.10.0.x`) in parallel, so selection is by
   the `prerelease` flag, never by version order.
 
+**Do not name build artifacts after `github.sha`.** On `pull_request` that is the ephemeral merge
+commit, which belongs to no branch and cannot be resolved after the run. Use
+`github.event.pull_request.head.sha || github.sha`. The build itself keeps running against the merge.
+
 `build/verify-patch-target.sh` is the check that gives a new-version build meaning: compiling only
 exercises four rarely-changing API assemblies, while the patched method is internal to the server and
 has changed before. A non-matching Harmony postfix fails **silently** — it never applies, and the

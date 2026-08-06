@@ -33,8 +33,15 @@ jobs:
 
       # build/emby-version.txt is the single source of truth for the pinned
       # version; inputs.* is empty on events that carry no inputs (pull_request).
-      - name: Resolve the Emby version
-        id: emby
+      #
+      # github.sha is not the commit under test on pull_request: it is the
+      # ephemeral merge commit GitHub creates for the run, which belongs to no
+      # branch and cannot be looked up once the run is over. The build keeps
+      # running against that merge - testing the merge result is the point of a
+      # pull-request build - but the artifact is named after the commit that was
+      # actually pushed, so it can be traced back to one.
+      - name: Resolve the build inputs
+        id: ctx
         run: |
           set -euo pipefail
           version="${{ inputs.emby-version }}"
@@ -44,8 +51,22 @@ jobs:
           else
             echo "Building against the requested $version"
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Built against Emby Server \`$version\`" >> "$GITHUB_STEP_SUMMARY"
+
+          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "Commit under test: $sha"
+
+          {
+            echo "version=$version"
+            echo "sha=$sha"
+            echo "short_sha=${sha:0:7}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Build"
+            echo
+            echo "- Emby Server \`$version\`"
+            echo "- Commit \`$sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v4
@@ -63,10 +84,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: lib
-          key: emby-refs-${{ steps.emby.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
+          key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
 
       - name: Fetch Emby assemblies
-        run: bash build/fetch-emby-refs.sh "${{ steps.emby.outputs.version }}"
+        run: bash build/fetch-emby-refs.sh "${{ steps.ctx.outputs.version }}"
 
       # The check that actually matters when moving to a new Emby version.
       # Compiling proves little: the four referenced API assemblies rarely change,
@@ -117,6 +138,6 @@ jobs:
       - name: Upload plugin
         uses: actions/upload-artifact@v4
         with:
-          name: EmbyProxyRouter-emby${{ steps.emby.outputs.version }}-${{ github.sha }}
+          name: EmbyProxyRouter-emby${{ steps.ctx.outputs.version }}-${{ steps.ctx.outputs.short_sha }}
           path: src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll
           if-no-files-found: error

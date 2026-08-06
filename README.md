@@ -164,6 +164,12 @@ It runs on every pull request against `main`, and can be started by hand with an
 input. Given none, it uses the pinned `build/emby-version.txt`. The version is also the cache key for
 the fetched assemblies, so only the first run per version pays for the ~180 MB download.
 
+The artifact is named `EmbyProxyRouter-emby<version>-<commit>`, where the commit is the one that was
+pushed — not `github.sha`. On a pull request that is the throwaway merge commit GitHub creates for the
+run: it belongs to no branch and cannot be resolved once the run is over. The build still runs against
+that merge, because testing the merge result is the point; only the label points at a commit that
+exists.
+
 **`release-check.yml`** answers the question the pull-request build cannot: *does a newer Emby Server
 release break the plugin?* It reads the Emby release list, compares the newest release against the
 pinned version, and — if a newer one exists — dispatches `build.yml` against it. That build fetches
