@@ -7,21 +7,26 @@
 # Emby Server .deb and extracts only the four assemblies needed to build.
 #
 # Usage:  ./build/fetch-emby-refs.sh [version]
-# Default version is the one this plugin was developed and verified against.
+# Default is the version pinned in build/emby-version.txt, which is the one this
+# plugin was developed and verified against.
 
 set -euo pipefail
 
-VERSION="${1:-4.9.5.0}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="${1:-$(tr -d '[:space:]' < "$REPO_ROOT/build/emby-version.txt")}"
 LIB_DIR="$REPO_ROOT/lib"
 URL="https://github.com/MediaBrowser/Emby.Releases/releases/download/${VERSION}/emby-server-deb_${VERSION}_amd64.deb"
 
-# Only these four are referenced by the plugin.
+# Referenced by the plugin at compile time.
 NEEDED=(
   MediaBrowser.Common.dll
   MediaBrowser.Controller.dll
   MediaBrowser.Model.dll
   Emby.Web.GenericEdit.dll
+  # Not referenced — this is the assembly the plugin patches. It is kept so the
+  # patch target can be verified against a given Emby version without a second
+  # 180 MB download. See build/verify-patch-target.sh.
+  Emby.Server.Implementations.dll
 )
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "error: '$1' is required but not installed." >&2; exit 1; }; }

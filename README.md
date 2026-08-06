@@ -109,7 +109,7 @@ Requirements: **.NET SDK 8.0** plus `curl`, `ar` and `tar`.
 git clone <this-repo> emby-proxy-plugin
 cd emby-proxy-plugin
 
-# Fetches the four Emby reference assemblies (~180 MB download, only 4 DLLs are kept).
+# Fetches the Emby assemblies (~180 MB download, only 5 DLLs are kept).
 ./build/fetch-emby-refs.sh
 
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
@@ -124,30 +124,63 @@ alongside it.
 They are proprietary Emby binaries; redistributing them is not ours to do. On top of that, there is
 no matching NuGet package for 4.9.5.0 anyway: `MediaBrowser.Server.Core` stops at 4.9.1.90, and
 `Emby.Web.GenericEdit` — required for the settings page — is not on NuGet at all. The script fetches
-exactly the four files needed from the official release.
+only what is needed from the official release: four assemblies the plugin compiles against, plus
+`Emby.Server.Implementations.dll`, which is not referenced but is the assembly the plugin patches —
+keeping it allows the patch target to be verified without a second 180 MB download.
 
+The version is pinned in `build/emby-version.txt` — one file, read by both the fetch script and CI.
 For a different Emby version:
 
 ```bash
 FORCE=1 ./build/fetch-emby-refs.sh 4.9.6.0
 ```
 
-### Building in CI
+### Verifying the patch target
 
-`.github/workflows/build.yml` performs the same two steps on a GitHub runner and uploads the
-resulting DLL as a build artifact, so a plugin binary can be produced without a local .NET SDK.
+```bash
+dotnet tool install -g ilspycmd --version 9.1.0.7988
+./build/verify-patch-target.sh
+```
 
-It runs on every pull request against `main`, and can be started by hand from *Actions → Build → Run
-workflow* — the manual run takes the Emby version as an input (default `4.9.5.0`). GitHub only offers
-that button for workflows present on the default branch, so manual runs work once this file is on
-`main`.
+This is the check that matters when moving to a new Emby version, and compiling is not a substitute
+for it. The four referenced API assemblies rarely change, while the patched method is internal to the
+server and **has** changed before — it used to return `HttpClientHandler` and now returns
+`HttpMessageHandler`. A Harmony postfix whose `__result` parameter no longer matches simply never
+applies: the plugin would install cleanly, show no error, and silently route nothing.
 
-The Emby version doubles as the cache key for the fetched reference assemblies, so only the first run
-per version pays for the ~180 MB download.
+The script reports which part changed — the type, the method, or its return type.
 
-Besides compiling, the workflow asserts that the output is still a single self-contained DLL — no
-`0Harmony.dll` next to it, and not suspiciously small — because that property is what makes
-deployment a one-file copy, and it would otherwise break silently.
+### Continuous integration
+
+Two workflows, with different jobs.
+
+**`build.yml`** does the same steps as a local build on a runner, then verifies the patch target and
+that the output is still a single self-contained DLL — no `0Harmony.dll` next to it, not suspiciously
+small — because that property is what makes deployment a one-file copy and would otherwise break
+silently. The DLL is uploaded as a build artifact, so a plugin binary can be produced without a local
+.NET SDK.
+
+It runs on every pull request against `main`, and can be started by hand with an Emby version as
+input. Given none, it uses the pinned `build/emby-version.txt`. The version is also the cache key for
+the fetched assemblies, so only the first run per version pays for the ~180 MB download.
+
+**`release-check.yml`** answers the question the pull-request build cannot: *does a newer Emby Server
+release break the plugin?* It reads the Emby release list, compares the newest release against the
+pinned version, and — if a newer one exists — dispatches `build.yml` against it. That build fetches
+that version's assemblies and re-runs the patch-target check.
+
+The two lines Emby publishes in parallel (stable `4.9.x` and beta `4.10.0.x`) are separated by the
+`prerelease` flag rather than by version order, because taking the newest tag would silently track
+betas. The flags found are printed to the job summary, so the decision is visible rather than assumed.
+Betas can be checked deliberately with the `include-prerelease` input.
+
+A green run means the version can be adopted by bumping `build/emby-version.txt`. A red one means the
+plugin needs attention before it can claim to support that version — which is exactly the failure
+that goes unnoticed otherwise, because a non-matching Harmony patch fails silently rather than loudly.
+
+Both workflows are `workflow_dispatch`; GitHub only offers the *Run workflow* button for workflows
+present on the default branch, so manual runs work once they are on `main`. `release-check.yml` has a
+weekly `schedule` prepared but commented out.
 
 ---
 
@@ -310,9 +343,12 @@ disagree.
 ## Project layout
 
 ```
-.github/workflows/build.yml   CI build (pull requests + manual)
-build/fetch-emby-refs.sh      Fetches the Emby reference assemblies
-lib/                          Target folder for them (not committed)
+.github/workflows/build.yml         Build + patch-target check (pull requests, manual)
+.github/workflows/release-check.yml Finds newer Emby releases, dispatches a build
+build/emby-version.txt              The pinned Emby version (single source of truth)
+build/fetch-emby-refs.sh            Fetches the Emby assemblies
+build/verify-patch-target.sh        Asserts the patched method still matches
+lib/                                Target folder for the assemblies (not committed)
 src/EmbyProxyRouter/
   Plugin.cs                   Entry point, dashboard status, server entry point
   PluginOptions.cs            Settings page (Emby.Web.GenericEdit)
