@@ -4,7 +4,8 @@ A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) tr
 **Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5** —
 while always contacting private networks and Emby's licensing servers directly.
 
-Developed and verified against **Emby Server 4.9.5.0** (net8.0).
+Developed and verified against Emby Server (net8.0) — the exact version each build was verified
+against is stated on its [release](../../releases).
 
 ## What this plugin does
 
