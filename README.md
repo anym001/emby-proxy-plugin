@@ -147,5 +147,8 @@ and rebuild. Pull requests with translations are welcome — see [CONTRIBUTING.m
 GPL-3.0 — see [LICENSE](LICENSE).
 
 The operating principle (a Harmony postfix on Emby's internal handler factory) is inspired by
-[StrmAssistant](https://github.com/sjtuross/StrmAssistant) (GPL-3.0). The code here was written
-independently; the licence is adopted out of respect for that origin.
+[StrmAssistant](https://github.com/sjtuross/StrmAssistant) (GPL-3.0).
+
+---
+
+Built with [Claude Code](https://claude.ai/code)
