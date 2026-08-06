@@ -248,6 +248,48 @@ gets its own. Both go through `ci.yml` like any other change, which matters most
 embedded into the plugin DLL and patches the CLR at runtime, so a bump is verified by the
 patch-target check before it is taken rather than after.
 
+## Distribution and the Emby plugin catalog
+
+The deliverable is a DLL copied into `/config/plugins`. Emby *can* update a plugin from its dashboard,
+but only through one channel, and it is worth knowing exactly how narrow that channel is before
+relying on it.
+
+`InstallationManager` reads the catalog from `https://www.mb3admin.com/admin/service/EmbyPackages.json`
+— a **compiled-in constant**. Emby has no equivalent of Jellyfin's custom repository URLs: there is no
+setting, no config file and no API for a second source. Appearing in the dashboard therefore means
+being accepted into Emby's own catalog; there is no self-hosted alternative.
+
+`PluginUpdateTask` (`Key = "PluginUpdates"`, hidden) runs on startup and every 24 h — every 3 h when
+the server's update level is Beta. For each loaded plugin it looks the catalog up by **name and
+`Plugin.Id`**, takes the highest version whose `requiredVersionStr` is at or below the running server,
+and installs it if it exceeds the assembly version. Note that its own description claims it only
+touches "plugins that are configured to update automatically"; in 4.9.5.0 there is no such filter in
+the code path.
+
+Installation downloads `sourceUrl`, verifies `checksum` as the MD5 of the file when one is given, and
+writes it to `PluginsPath/targetFilename`. `sourceUrl` is an arbitrary URL, so Emby would host the
+metadata while the DLL keeps coming from this repository's releases.
+
+`build/catalog-entry.sh` prints the entry to submit:
+
+```bash
+dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
+./build/catalog-entry.sh v1.0.0 > catalog-entry.json
+```
+
+It is a generator rather than a committed file because `versionStr`, `checksum` and `sourceUrl` change
+with every release, and a stored copy would be stale the moment it was written. Three fields in its
+output are Emby's to confirm on submission rather than facts read out of the assemblies: `id` is
+assigned by them and is omitted, `type` is compared as a free-form string against whatever the
+dashboard requests, and `classification` is emitted as `"Release"` because the client-side enum is
+`Release | Beta | Dev`.
+
+Two consequences worth weighing before pursuing this. The update task is unconditional, so accepting a
+catalog entry means the plugin replaces its own binary on a schedule, driven by a record held by a
+third party — for a plugin whose purpose is control over outbound traffic, that is a real trust
+surface. And `mb3admin.com` is in `BypassRules.Always`, so the update check deliberately does *not*
+go through the proxy and keeps working under fail-closed.
+
 ## Project layout
 
 ```
@@ -263,6 +305,7 @@ build/emby-version.txt              The pinned Emby version (single source of tr
 build/fetch-emby-refs.sh            Fetches the Emby assemblies
 build/verify-patch-target.sh        Asserts the patched method still matches
 build/verify-single-dll.sh          Asserts the output is still one self-contained file
+build/catalog-entry.sh              Generates the package entry for Emby's plugin catalog
 lib/                                Target folder for the assemblies (not committed)
 src/EmbyProxyRouter/
   Plugin.cs                   Entry point, dashboard status, server entry point
