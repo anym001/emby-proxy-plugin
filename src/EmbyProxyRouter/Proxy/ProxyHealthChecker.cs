@@ -21,12 +21,21 @@ namespace EmbyProxyRouter.Proxy
     public sealed class ProxyHealthChecker : IDisposable
     {
         /// <summary>
-        /// Two probes against one operator: plain HTTP exercises the proxy's forwarding path, HTTPS
-        /// exercises the CONNECT tunnel. Both matter — a proxy can serve one and refuse the other.
+        /// The two probes are split by scheme because they answer different questions: plain HTTP
+        /// exercises the proxy's forwarding path, HTTPS exercises its CONNECT tunnel. A proxy can
+        /// serve one and refuse the other, and <see cref="CheckNowAsync"/> requires both to succeed.
         /// </summary>
-        public const string DefaultUrls =
-            "http://detectportal.firefox.com/success.txt\n" +
-            "https://detectportal.firefox.com/success.txt";
+        /// <remarks>
+        /// captiveportal.kuketz.de is a captive-portal endpoint run for privacy reasons: it answers
+        /// 204 with no body over both HTTP and HTTPS, and its operator states that request data
+        /// including the IP address is discarded rather than logged. Every check URL sees the proxy's
+        /// egress address on a fixed schedule, so the default should not be a large ad-funded
+        /// operator. See https://www.kuketz-blog.de/android-captive-portal-check-204-http-antwort-von-captiveportal-kuketz-de/
+        /// </remarks>
+        public const string DefaultHttpUrl = "http://captiveportal.kuketz.de/";
+
+        /// <summary>The HTTPS counterpart of <see cref="DefaultHttpUrl"/>, same operator.</summary>
+        public const string DefaultHttpsUrl = "https://captiveportal.kuketz.de/";
 
         private static readonly TimeSpan TcpTimeout = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(10);
@@ -123,22 +132,27 @@ namespace EmbyProxyRouter.Proxy
                     return ProxyHealth.Reachable;
                 }
 
-                string lastError = null;
+                // Every URL has to answer. A first-success-wins pass would stop at the plain-HTTP
+                // entry and never exercise the CONNECT tunnel, so a proxy that forwards HTTP and
+                // refuses CONNECT would report healthy while nearly all of Emby's traffic fails.
+                long totalMs = 0;
                 foreach (var url in settings.HealthCheckUrls)
                 {
                     var probe = await CheckHttpAsync(settings, url, cancellationToken).ConfigureAwait(false);
-                    if (probe.Success)
+                    if (!probe.Success)
                     {
-                        Update(ProxyHealth.Reachable, Localizer.Format(
-                            "HealthHttpOk", endpoint.Describe(), url, probe.ElapsedMs));
-                        return ProxyHealth.Reachable;
+                        // Stop at the first failure. The verdict cannot change any more, and probing
+                        // on would only add one HTTP timeout per remaining URL to every failed cycle.
+                        Update(ProxyHealth.Unreachable, Localizer.Format("HealthUrlRequired", probe.Error));
+                        return ProxyHealth.Unreachable;
                     }
 
-                    lastError = probe.Error;
+                    totalMs += probe.ElapsedMs;
                 }
 
-                Update(ProxyHealth.Unreachable, Localizer.Format("HealthNoHttpOk", lastError));
-                return ProxyHealth.Unreachable;
+                Update(ProxyHealth.Reachable, Localizer.Format(
+                    "HealthAllHttpOk", settings.HealthCheckUrls.Count, endpoint.Describe(), totalMs));
+                return ProxyHealth.Reachable;
             }
             catch (Exception ex)
             {

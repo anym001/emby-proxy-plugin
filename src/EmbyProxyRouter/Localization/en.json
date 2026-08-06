@@ -30,10 +30,13 @@
   "DescFailOpen": "OFF (default, fail-closed): if the proxy is unreachable, affected requests are aborted and logged. ON (fail-open): requests go straight out to the internet without the proxy - every such case is logged as a warning.",
 
   "LabelBypassList": "Bypass list",
-  "DescBypassList": "One entry per line. Accepts CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution is performed - hostnames are matched literally.",
+  "DescBypassList": "Additional entries, one per line. Accepts CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution is performed - hostnames are matched literally. Private networks and Emby's own licensing servers are always bypassed and need no entry here.",
 
-  "LabelCheckUrls": "Check URLs",
-  "DescCheckUrls": "One URL per line, fetched through the proxy. The first successful response (HTTP 2xx) counts as reachable. Leave empty to check TCP connectivity only.",
+  "LabelCheckUrlHttp": "Check URL (HTTP)",
+  "DescCheckUrlHttp": "Tests whether the proxy forwards plain HTTP. Must answer 2xx; redirects are not followed and therefore fail. Leave empty to skip this check.",
+
+  "LabelCheckUrlHttps": "Check URL (HTTPS)",
+  "DescCheckUrlHttps": "Tests whether the proxy opens a CONNECT tunnel - this is the path almost all of Emby's traffic takes. A proxy can forward HTTP and still refuse CONNECT, which is why both are checked and both must succeed. Leave both fields empty to check TCP connectivity only.",
 
   "LabelCheckInterval": "Check interval (seconds)",
   "DescCheckInterval": "Minimum 10 seconds.",
@@ -63,8 +66,8 @@
   "HealthProxyDisabled": "Proxy is disabled",
   "HealthAddressInvalid": "Proxy address is invalid",
   "HealthTcpOnlyOk": "TCP connect succeeded (no HTTP check configured)",
-  "HealthHttpOk": "HTTP check via {0} succeeded ({1}, {2} ms)",
-  "HealthNoHttpOk": "TCP reachable, but no HTTP check succeeded. Last error: {0}",
+  "HealthAllHttpOk": "All {0} HTTP checks via {1} succeeded ({2} ms total)",
+  "HealthUrlRequired": "TCP reachable, but an HTTP check failed: {0}",
   "HealthCheckFailed": "Check failed: {0}",
   "HealthTcpTimeout": "TCP connect to {0}:{1} timed out after {2} s",
   "HealthTcpFailed": "TCP connect to {0}:{1} failed: {2}",
@@ -98,5 +101,6 @@
   "ErrInvalidIp": "Invalid IP address in: {0}",
   "ErrInvalidPrefix": "Invalid prefix length in: {0}",
   "ErrPrefixFamily": "Prefix length does not match the address family: {0}",
-  "ErrIntervalMin": "The check interval must be at least 10 seconds."
+  "ErrIntervalMin": "The check interval must be at least 10 seconds.",
+  "ErrCheckUrlScheme": "This URL has to start with {0}"
 }

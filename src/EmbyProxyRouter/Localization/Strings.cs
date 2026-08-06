@@ -42,8 +42,11 @@ namespace EmbyProxyRouter.Localization
         public static string LabelBypassList => Localizer.Get(nameof(LabelBypassList));
         public static string DescBypassList => Localizer.Get(nameof(DescBypassList));
 
-        public static string LabelCheckUrls => Localizer.Get(nameof(LabelCheckUrls));
-        public static string DescCheckUrls => Localizer.Get(nameof(DescCheckUrls));
+        public static string LabelCheckUrlHttp => Localizer.Get(nameof(LabelCheckUrlHttp));
+        public static string DescCheckUrlHttp => Localizer.Get(nameof(DescCheckUrlHttp));
+
+        public static string LabelCheckUrlHttps => Localizer.Get(nameof(LabelCheckUrlHttps));
+        public static string DescCheckUrlHttps => Localizer.Get(nameof(DescCheckUrlHttps));
 
         public static string LabelCheckInterval => Localizer.Get(nameof(LabelCheckInterval));
         public static string DescCheckInterval => Localizer.Get(nameof(DescCheckInterval));

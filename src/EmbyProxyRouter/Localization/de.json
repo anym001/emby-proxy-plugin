@@ -30,10 +30,13 @@
   "DescFailOpen": "AUS (Standard, Fail-Closed): Ist der Proxy nicht erreichbar, werden betroffene Requests abgebrochen und protokolliert. EIN (Fail-Open): Requests gehen ohne Proxy direkt ins Internet – jeder solche Fall wird als Warnung geloggt.",
 
   "LabelBypassList": "Bypass-Liste",
-  "DescBypassList": "Ein Eintrag pro Zeile. Erlaubt: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Es findet keine DNS-Auflösung statt – Hostnamen werden literal verglichen.",
+  "DescBypassList": "Zusätzliche Einträge, einer pro Zeile. Erlaubt: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Es findet keine DNS-Auflösung statt – Hostnamen werden literal verglichen. Private Netze und Embys eigene Lizenzserver werden immer am Proxy vorbeigeleitet und brauchen hier keinen Eintrag.",
 
-  "LabelCheckUrls": "Prüf-URLs",
-  "DescCheckUrls": "Eine URL pro Zeile, wird über den Proxy abgerufen. Die erste erfolgreiche Antwort (HTTP 2xx) gilt als erreichbar. Leer lassen, um nur die TCP-Verbindung zu prüfen.",
+  "LabelCheckUrlHttp": "Prüf-URL (HTTP)",
+  "DescCheckUrlHttp": "Prüft, ob der Proxy einfaches HTTP weiterleitet. Muss mit 2xx antworten; Weiterleitungen zählen nicht, da ihnen nicht gefolgt wird. Leer lassen, um diese Prüfung zu überspringen.",
+
+  "LabelCheckUrlHttps": "Prüf-URL (HTTPS)",
+  "DescCheckUrlHttps": "Prüft, ob der Proxy einen CONNECT-Tunnel öffnet – über diesen Weg läuft nahezu der gesamte Emby-Traffic. Ein Proxy kann HTTP weiterleiten und CONNECT trotzdem verweigern; deshalb wird beides geprüft und beides muss erfolgreich sein. Beide Felder leer lassen, um nur die TCP-Verbindung zu prüfen.",
 
   "LabelCheckInterval": "Prüfintervall (Sekunden)",
   "DescCheckInterval": "Mindestens 10 Sekunden.",
@@ -63,8 +66,8 @@
   "HealthProxyDisabled": "Proxy ist deaktiviert",
   "HealthAddressInvalid": "Proxy-Adresse ist ungültig",
   "HealthTcpOnlyOk": "TCP-Verbindung erfolgreich (kein HTTP-Check konfiguriert)",
-  "HealthHttpOk": "HTTP-Check über {0} erfolgreich ({1}, {2} ms)",
-  "HealthNoHttpOk": "TCP erreichbar, aber kein HTTP-Check erfolgreich. Letzter Fehler: {0}",
+  "HealthAllHttpOk": "Alle {0} HTTP-Checks über {1} erfolgreich ({2} ms gesamt)",
+  "HealthUrlRequired": "TCP erreichbar, aber ein HTTP-Check ist fehlgeschlagen: {0}",
   "HealthCheckFailed": "Prüfung fehlgeschlagen: {0}",
   "HealthTcpTimeout": "TCP-Verbindung zu {0}:{1} nach {2} s abgelaufen",
   "HealthTcpFailed": "TCP-Verbindung zu {0}:{1} fehlgeschlagen: {2}",
@@ -98,5 +101,6 @@
   "ErrInvalidIp": "Ungültige IP-Adresse in: {0}",
   "ErrInvalidPrefix": "Ungültige Präfixlänge in: {0}",
   "ErrPrefixFamily": "Präfixlänge passt nicht zur Adressfamilie: {0}",
-  "ErrIntervalMin": "Das Prüfintervall muss mindestens 10 Sekunden betragen."
+  "ErrIntervalMin": "Das Prüfintervall muss mindestens 10 Sekunden betragen.",
+  "ErrCheckUrlScheme": "Diese URL muss mit {0} beginnen"
 }
