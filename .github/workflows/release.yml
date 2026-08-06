@@ -11,12 +11,18 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Publishing a release through the GitHub UI (or the API) with a tag name
+  # that doesn't exist yet creates that tag via the Releases endpoint, which
+  # emits a `release` event but never a `push` event. `push: tags` alone
+  # never sees it, so the tag gets created and the plugin never gets built.
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -30,6 +36,10 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # On a `release` event, GITHUB_SHA is the tip of the default
+          # branch, not the tagged commit - the checkout must be pinned to
+          # the tag explicitly or a release event would build the wrong ref.
+          ref: ${{ github.event.release.tag_name || github.ref_name }}
           # gh release --generate-notes needs the history to diff against the
           # previous tag; the default shallow checkout has none.
           fetch-depth: 0
@@ -39,10 +49,15 @@ jobs:
       # verified against has to be the one the repository claims to support.
       - name: Resolve the release inputs
         id: ctx
+        env:
+          # GITHUB_REF_NAME is the default branch on a `release` event, not
+          # the tag - resolve from the release payload first.
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < build/emby-version.txt)"
-          tag="${GITHUB_REF_NAME}"
+          tag="${TAG}"
+          commit="$(git rev-parse HEAD)"
 
           {
             echo "version=$version"
@@ -53,7 +68,7 @@ jobs:
             echo "### Release $tag"
             echo
             echo "- Emby Server \`$version\`"
-            echo "- Commit \`$GITHUB_SHA\`"
+            echo "- Commit \`$commit\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up .NET SDK
