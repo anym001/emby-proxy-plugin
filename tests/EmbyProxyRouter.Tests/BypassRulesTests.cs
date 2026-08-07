@@ -79,33 +79,42 @@ namespace EmbyProxyRouter.Tests
             Assert.False(IsBypassed(null, url));
         }
 
-        // --- Single-label hostnames --------------------------------------------------------------
+        // --- Dotless hostnames ---------------------------------------------------------------------
 
         /// <summary>
-        /// A hostname with no dot cannot be a public DNS name, so it is always bypassed.
+        /// A hostname with no dot gets no compiled-in treatment; it goes through the proxy.
         /// </summary>
         /// <remarks>
-        /// It resolves through the hosts file, the search domain or mDNS/NetBIOS — none of which a
-        /// remote proxy can do. Proxying "nas" cannot succeed, and under fail-closed it costs the
-        /// server every local service it reaches by short name. This is the one thing .NET's
-        /// WebProxy(bypassOnLocal: true) covers that a CIDR list cannot express.
+        /// Such a rule existed briefly and was removed. It was the only compiled-in rule matching on
+        /// the *shape* of a name rather than on an allocated address range, which made the fixed set
+        /// harder to state than "these ranges, plus mDNS". Note that .NET's own
+        /// WebProxy(bypassOnLocal: true) does bypass these — one of several ways this plugin's
+        /// switch is not that switch.
+        ///
+        /// Asserted explicitly rather than left to PublicDestinationsAreNotBypassed, so re-adding
+        /// the rule has to delete a test that says why it is gone.
         /// </remarks>
         [Theory]
         [InlineData("http://nas:8096/")]
         [InlineData("http://router/")]
         [InlineData("http://emby/")]
-        [InlineData("http://nas./")]        // trailing dot is the same host
-        public void ASingleLabelHostnameIsBypassed(string url)
-        {
-            Assert.True(IsBypassed(null, url));
-        }
-
-        [Theory]
-        [InlineData("http://nas.example.com/")]
-        [InlineData("https://api.themoviedb.org/")]
-        public void ADottedHostnameIsNotCoveredByTheSingleLabelRule(string url)
+        [InlineData("http://nas./")]        // trailing dot does not make it dotted
+        public void ADotlessHostnameIsNotBypassedOnItsOwn(string url)
         {
             Assert.False(IsBypassed(null, url));
+            Assert.False(IsBypassedWithoutPrivate(null, url));
+        }
+
+        /// <summary>
+        /// The escape hatch has to actually work, or removing the rule would strand anyone using it.
+        /// </summary>
+        [Theory]
+        [InlineData("http://nas:8096/")]
+        [InlineData("http://nas./")]
+        public void ADotlessHostnameCanBeBypassedByPuttingItInTheList(string url)
+        {
+            Assert.True(IsBypassed("nas", url));
+            Assert.True(IsBypassedWithoutPrivate("nas", url));
         }
 
         /// <summary>
@@ -145,7 +154,6 @@ namespace EmbyProxyRouter.Tests
         [InlineData("http://[fc00::1]/")]
         [InlineData("http://[fe80::1]/")]
         [InlineData("http://anything.local/")]
-        [InlineData("http://nas:8096/")]        // the single-label rule follows the same switch
         [InlineData("http://[::ffff:10.0.0.1]/")]
         public void SwitchingOffPrivateNetworksSendsThemThroughTheProxy(string url)
         {

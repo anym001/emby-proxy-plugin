@@ -103,7 +103,7 @@ namespace EmbyProxyRouter
         // ---- Bypass -----------------------------------------------------------------------------
 
         /// <summary>
-        /// Whether RFC1918, link-local, ULA, <c>*.local</c> and single-label hosts skip the proxy.
+        /// Whether RFC1918, link-local, ULA and <c>*.local</c> skip the proxy.
         /// </summary>
         /// <remarks>
         /// On by default, and switching it off is the consequential direction: with it off and

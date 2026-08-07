@@ -247,18 +247,35 @@ proxy" is a legitimate thing to want on a host whose only route outward is a tun
 fixed entries are merged inside it: a caller that can omit the question is a caller that will
 eventually answer it by accident.
 
-Single-label hostnames (`nas`, `router`) follow the same switch but live in `IsBypassed` rather than
-in either constant, because no rule syntax in that list can express "any host with no dot". A name
-with no dot cannot be a public DNS name — it resolves through the hosts file, the machine's search
-domain or mDNS — so a proxy elsewhere has no way to look it up, and proxying one cannot succeed.
-This is the one case .NET's own `WebProxy(bypassOnLocal: true)` covers that a CIDR list cannot
-express. A trailing dot is folded away first, for the same reason the IPv4-mapped IPv6 form is: a
-destination must not change route because of how it happened to be spelled.
+Both constants are address ranges plus mDNS, and deliberately nothing else. A rule for dotless
+hostnames (`nas`, `router`) existed briefly and was removed: it was the only compiled-in rule
+matching on the *shape* of a name rather than on an allocated range, and shape is a weaker
+justification than it looks — a dotless name is unroutable on the public internet by convention,
+where the ranges are unroutable by allocation. Mixing the two made the fixed set harder to state
+than "these ranges, plus mDNS". Anyone reaching a NAS by short name writes `nas` in the bypass list,
+where an exact host entry matches it, and the decision stays visible in the configuration.
 
-What neither constant can cover, because matching is literal and does no DNS: a LAN device addressed
-by a dotted name (`emby.lan`, `nas.home.arpa`, an own domain pointing at a 192.168 address). That is
-a name, not an IP, so the CIDR rules never see it. The user's bypass list is the answer, and it
-applies on top of both constants and regardless of the switch.
+A trailing dot is folded away before any matching, for the same reason the IPv4-mapped IPv6 form is:
+a destination must not change route because of how it happened to be spelled.
+
+So everything matched **by name** rather than by address range lives in the user's list, which
+applies on top of both constants and regardless of the switch. That is more than it sounds, because
+matching is literal and does no DNS: a LAN device addressed by a dotted name (`emby.lan`,
+`nas.home.arpa`, an own domain pointing at a 192.168 address) is a name, not an IP, so the CIDR
+rules never see it either.
+
+### This switch is not Radarr's "Bypass Proxy for Local Addresses"
+
+The names are similar and the coverage is almost disjoint, which is worth stating because the
+comparison comes up. Measured against .NET 8, `WebProxy(bypassOnLocal: true)` bypasses loopback,
+dotless hostnames, **the machine's own interface addresses** (whatever range they are in — a public
+address on the host's own NIC is bypassed) and hosts in the machine's own DNS suffix. It does *not*
+bypass `192.168.1.50`, `10.11.12.13`, `169.254.0.0/16`, `fc00::/7` or `*.local`.
+
+This plugin's switch governs exactly the set that one does not: RFC1918, link-local, ULA and mDNS.
+Loopback is unconditional here rather than part of the switch, and dotless names are not covered at
+all. Radarr passes `BypassLocalAddress` and `BypassListAsArray` to `WebProxy` together for the same
+reason both exist here: neither mechanism subsumes the other.
 
 **Emby's own endpoints are deliberately not bypassed.** `mb3admin.com` (`PluginSecurityManager`:
 `/admin/service/registration/validate`, `/admin/service/appstore/register`, and the plugin catalogue

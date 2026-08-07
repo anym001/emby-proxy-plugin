@@ -3,7 +3,7 @@
   "_languageName": "Deutsch",
 
   "EditorTitle": "Proxy Router",
-  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Private Netze und kurze Hostnamen werden direkt angesprochen, sofern man das nicht abschaltet.",
+  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Private Netze werden direkt angesprochen, sofern man das nicht abschaltet.",
 
   "LabelProxyStatus": "Proxy-Status",
   "LabelFailurePolicy": "Verhalten bei Proxy-Ausfall",
@@ -30,7 +30,7 @@
   "DescFailOpen": "AUS (Standard, Fail-Closed): Ist der Proxy nicht erreichbar, werden betroffene Requests abgebrochen und protokolliert. EIN (Fail-Open): Requests gehen ohne Proxy direkt ins Internet – jeder solche Fall wird als Warnung geloggt.",
 
   "LabelBypassPrivate": "Private Netze am Proxy vorbeileiten",
-  "DescBypassPrivate": "EIN (Standard): private Netze (10.x, 172.16-31.x, 192.168.x), Link-Local, IPv6-ULA, *.local und Hostnamen ohne Punkt (nas, router) werden direkt angesprochen. AUS: sie laufen ebenfalls über den Proxy – unter Fail-Closed schneidet ein nicht erreichbarer Proxy den Server damit auch vom eigenen LAN ab. Nur ausschalten, wenn der Proxy wirklich der einzige Weg nach außen ist. Die eigene Loopback-Adresse läuft in keinem Fall über den Proxy.",
+  "DescBypassPrivate": "EIN (Standard): private Netze (10.x, 172.16-31.x, 192.168.x), Link-Local, IPv6-ULA und *.local werden direkt angesprochen. AUS: sie laufen ebenfalls über den Proxy – unter Fail-Closed schneidet ein nicht erreichbarer Proxy den Server damit auch vom eigenen LAN ab. Nur ausschalten, wenn der Proxy wirklich der einzige Weg nach außen ist. Die eigene Loopback-Adresse läuft in keinem Fall über den Proxy.",
 
   "LabelBypassList": "Bypass-Liste",
   "DescBypassList": "Zusätzliche Einträge, einer pro Zeile. Erlaubt: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Es findet keine DNS-Auflösung statt – Hostnamen werden literal verglichen. Einträge hier kommen zu dem hinzu, was der Schalter darüber abdeckt, und gelten auch dann, wenn er aus ist. Embys Lizenzserver werden standardmäßig nicht umgangen – trage sie hier ein, wenn sie direkt angesprochen werden sollen.",

@@ -58,9 +58,10 @@ namespace EmbyProxyRouter.Proxy
         /// SOCKS tunnel has no direct path for this traffic to take anyway. Switching it off is a
         /// deliberate choice with a stated cost, not a default anybody arrives at by accident.
         ///
-        /// Hostnames with no dot are governed by the same switch but handled in
-        /// <see cref="IsBypassed"/>, because no rule syntax in this list can express "any single
-        /// label".
+        /// Address ranges and mDNS, and nothing beyond that. Anything matched on the shape of a
+        /// name — a dotless host, a guessed-at internal suffix — belongs in the user's bypass list,
+        /// where it is visible in the configuration rather than buried in a compiled-in rule. See
+        /// the end of <see cref="IsBypassed"/> for the rule that was tried and dropped.
         /// </remarks>
         public const string PrivateNetworks =
             "10.0.0.0/8\n" +
@@ -239,22 +240,18 @@ namespace EmbyProxyRouter.Proxy
                 }
             }
 
-            // A hostname with no dot in it cannot be a public DNS name. It resolves through the
-            // hosts file, the machine's own search domain, or mDNS/NetBIOS — all of which are
-            // meaningless to a proxy somewhere else, which has no way to look it up. So proxying
-            // "nas" or "router" cannot succeed, and under fail-closed it does active harm: the
-            // server loses the local services it reaches by short name.
+            // Deliberately no rule for dotless hostnames ("nas", "router"). One existed briefly and
+            // was removed: it is the only compiled-in rule that would have matched on the *shape* of
+            // a name rather than on an address range, and shape is a weaker justification than it
+            // first appears. A dotless name is unroutable on the public internet by convention, not
+            // by allocation — the compiled-in ranges are the latter, and mixing the two makes the
+            // fixed set harder to state than "these address ranges, plus mDNS".
             //
-            // This is the one case .NET's own WebProxy(bypassOnLocal: true) covers that a CIDR list
-            // cannot express, which is why it lives here as code rather than as an entry in
-            // PrivateNetworks — and why it follows the same switch: a single label is local in
-            // exactly the sense that switch is about. Dotless public TLDs have existed historically,
-            // but ICANN prohibits them for gTLDs (SAC053) and nothing Emby talks to uses one.
-            if (_bypassPrivateNetworks && host.IndexOf('.') < 0)
-            {
-                return true;
-            }
-
+            // Anyone who reaches a NAS by short name can write "nas" in the bypass list, where an
+            // exact host entry matches it. That keeps the decision visible in the configuration
+            // instead of buried in a rule nobody can see. Note that .NET's own
+            // WebProxy(bypassOnLocal: true) does bypass these — that is one of several ways this
+            // plugin's switch is not that switch; see ARCHITECTURE.md.
             return false;
         }
 
