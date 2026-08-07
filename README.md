@@ -4,8 +4,6 @@ A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) tr
 **Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5** —
 while always contacting private networks and Emby's licensing servers directly.
 
-Developed and verified against **Emby Server 4.9.5.0** (net8.0).
-
 ## What this plugin does
 
 * Routes the Emby core's HTTP clients through a proxy: metadata providers (TMDB, TVDB, …),
@@ -30,24 +28,10 @@ This is intentional — the point of the project is a single, auditable responsi
 * **No** circumvention of Emby's licence check. The licensing servers are on the bypass list on
   purpose.
 
-## Installation (Unraid / Docker)
+## Installation
 
-The Emby container usually maps a host directory to `/config`. The plugin DLL belongs in its
-`plugins` subfolder.
-
-```bash
-# On the Unraid host; adjust the path if needed:
-PLUGINS=/mnt/user/appdata/emby/plugins
-
-cp EmbyProxyRouter.dll "$PLUGINS/"
-chown 99:100 "$PLUGINS/EmbyProxyRouter.dll"
-chmod 644   "$PLUGINS/EmbyProxyRouter.dll"
-
-docker restart emby
-```
-
-`99:100` is `nobody:users` on Unraid — the same UID/GID the Emby container runs as. If the ownership
-is wrong, Emby ignores the file without comment.
+The Emby container usually maps a host directory to `/config`. Copy the plugin DLL into its
+`plugins` subfolder and restart the container.
 
 Then configure it in the dashboard under **Plugins → Proxy Router**.
 
