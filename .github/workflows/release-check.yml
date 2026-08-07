@@ -114,20 +114,32 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_VERSION: ${{ steps.versions.outputs.build_version }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          PINNED_VERSION: ${{ steps.versions.outputs.pinned }}
         run: |
           set -euo pipefail
           echo "Dispatching a CI run against Emby $BUILD_VERSION"
+
+          # jq builds the body rather than string interpolation: a ref name may
+          # contain characters that would otherwise break out of the JSON, and
+          # neither value belongs in the script text to begin with.
+          payload="$(jq -nc \
+            --arg ref "$REF_NAME" \
+            --arg version "$BUILD_VERSION" \
+            '{ref: $ref, inputs: {"emby-version": $version}}')"
+
           curl -sS --fail-with-body -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/dispatches" \
-            -d "{\"ref\":\"${{ github.ref_name }}\",\"inputs\":{\"emby-version\":\"$BUILD_VERSION\"}}"
+            "https://api.github.com/repos/$REPOSITORY/actions/workflows/ci.yml/dispatches" \
+            -d "$payload"
 
           {
             echo
             echo "### Result"
             echo
-            echo "Emby **$BUILD_VERSION** is newer than the pinned **${{ steps.versions.outputs.pinned }}**."
+            echo "Emby **$BUILD_VERSION** is newer than the pinned **$PINNED_VERSION**."
             echo "A CI run against it has been started - it re-verifies the patch target."
             echo
             echo "If that run is green, bump \`build/emby-version.txt\` to adopt the version."
@@ -136,11 +148,14 @@ jobs:
 
       - name: Report that nothing is pending
         if: steps.versions.outputs.build_version == ''
+        env:
+          PINNED_VERSION: ${{ steps.versions.outputs.pinned }}
+          LATEST_VERSION: ${{ steps.versions.outputs.latest }}
         run: |
           {
             echo
             echo "### Result"
             echo
-            echo "Nothing to do - the pinned **${{ steps.versions.outputs.pinned }}** is current"
-            echo "(newest considered release: **${{ steps.versions.outputs.latest }}**)."
+            echo "Nothing to do - the pinned **$PINNED_VERSION** is current"
+            echo "(newest considered release: **$LATEST_VERSION**)."
           } >> "$GITHUB_STEP_SUMMARY"

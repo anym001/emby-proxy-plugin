@@ -44,10 +44,14 @@ namespace EmbyProxyRouter
             : base(applicationHost)
         {
             Instance = this;
-            _logger = applicationHost.Resolve<ILogManager>().GetLogger(Name);
 
             try
             {
+                // Inside the try as well: resolving the log manager is the one step whose failure
+                // would otherwise throw before there is anything to report the throw with, and a
+                // throwing constructor takes the plugin out of the dashboard entirely.
+                _logger = applicationHost.Resolve<ILogManager>().GetLogger(Name);
+
                 var options = GetOptions();
 
                 ProxyRuntime.Initialize(_logger);
@@ -62,7 +66,10 @@ namespace EmbyProxyRouter
             {
                 // A throwing constructor would take the whole plugin out of the dashboard, leaving
                 // no way to see what went wrong.
-                _logger.ErrorException("Proxy Router failed to initialise.", ex);
+                if (_logger != null)
+                {
+                    _logger.ErrorException("Proxy Router failed to initialise.", ex);
+                }
             }
         }
 
@@ -173,13 +180,19 @@ namespace EmbyProxyRouter
                     Thread.Sleep(SaveCheckPoll);
                 }
 
-                _logger.Debug("Proxy Router: no check result within the save budget; " +
-                              "the page shows 'checking' until the periodic check completes.");
+                if (_logger != null)
+                {
+                    _logger.Debug("Proxy Router: no check result within the save budget; " +
+                                  "the page shows 'checking' until the periodic check completes.");
+                }
             }
             catch (Exception ex)
             {
                 // Never let this cost the user their settings - they are already written to disk.
-                _logger.ErrorException("Reachability check during save failed.", ex);
+                if (_logger != null)
+                {
+                    _logger.ErrorException("Reachability check during save failed.", ex);
+                }
             }
         }
 
@@ -192,13 +205,26 @@ namespace EmbyProxyRouter
 
             // Patch status first: without the patch nothing else on this page has any effect, and
             // saying so plainly beats letting the user believe a green proxy means traffic is routed.
-            if (HttpHandlerPatch.IsApplied)
+            if (HttpHandlerPatch.IsApplied && HttpHandlerPatch.DecorationFailureReason == null)
             {
                 options.PatchStatus = new StatusItem
                 {
                     Status = ItemStatus.Succeeded,
                     Caption = Localizer.Get("PatchCaption"),
                     StatusText = Localizer.Get("PatchActive")
+                };
+            }
+            else if (HttpHandlerPatch.IsApplied)
+            {
+                // The patch applied, but at least one handler could not be given the proxy. The
+                // gate still blocks those requests under fail-closed, so this is not "not active" —
+                // but reporting plain success would claim traffic is routed that is not.
+                options.PatchStatus = new StatusItem
+                {
+                    Status = ItemStatus.Warning,
+                    Caption = Localizer.Get("PatchCaption"),
+                    StatusText = Localizer.Format(
+                        "PatchDegraded", HttpHandlerPatch.DecorationFailureReason)
                 };
             }
             else

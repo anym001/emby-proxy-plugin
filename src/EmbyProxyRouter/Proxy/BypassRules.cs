@@ -166,13 +166,21 @@ namespace EmbyProxyRouter.Proxy
             IPAddress ip;
             if (IPAddress.TryParse(host, out ip))
             {
-                for (var i = 0; i < _cidrRules.Count; i++)
+                if (MatchesAnyCidr(ip))
                 {
-                    if (_cidrRules[i].Contains(ip))
-                    {
-                        return true;
-                    }
+                    return true;
                 }
+
+                // "::ffff:10.0.0.1" is the same host as "10.0.0.1", but CidrRule compares the
+                // address family first, so the compiled-in IPv4 ranges would never see it — a LAN
+                // address would be sent through the proxy, or blocked under fail-closed, purely
+                // because of how it was spelled. Rules written in the mapped form keep working
+                // because the unmapped pass above still runs first.
+                if (ip.IsIPv4MappedToIPv6 && MatchesAnyCidr(ip.MapToIPv4()))
+                {
+                    return true;
+                }
+
                 return false;
             }
 
@@ -187,6 +195,19 @@ namespace EmbyProxyRouter.Proxy
                 if (host.Length > suffix.Length &&
                     host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) &&
                     host[host.Length - suffix.Length - 1] == '.')
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool MatchesAnyCidr(IPAddress address)
+        {
+            for (var i = 0; i < _cidrRules.Count; i++)
+            {
+                if (_cidrRules[i].Contains(address))
                 {
                     return true;
                 }

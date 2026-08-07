@@ -40,8 +40,11 @@ in [ARCHITECTURE.md](ARCHITECTURE.md#building).
 
 ### Confirming the patch took effect
 
-The settings page shows a **Patch status** line at the top. If it says anything other than "Active",
-**no** traffic is being redirected, and the reason is stated right next to it. In the server log:
+The settings page shows a **Patch status** line at the top. "Active" is the state you want. "NOT
+active" means **no** traffic is being redirected, and the reason is stated right next to it. A third
+state, "Active, but …", means the patch is running while at least one HTTP handler could not be
+given the proxy — under fail-closed those requests are still blocked rather than leaking, but they
+are not being routed either, and a server restart usually clears it. In the server log:
 
 ```
 Harmony patch active on HttpMessageHandler ApplicationHost.CreateHttpClientHandler(HttpMessageHandlerOptions) (Emby.Server.Implementations 4.9.5.0).
@@ -129,9 +132,13 @@ and rebuild. Pull requests with translations are welcome — see [CONTRIBUTING.m
   the plugin exists to avoid.
 * **HTTP(S) proxy authentication is reactive.** .NET sends credentials only after the proxy answers
   `407`, not pre-emptively. Proxies that reject outright without issuing a challenge will not work.
-* **"Ignore certificate validation" is broad.** The option disables TLS validation both for the
-  connection to the proxy *and* for the destination connections tunnelled through it. Only enable it
-  when the proxy uses a self-signed certificate.
+* **"Ignore certificate validation" is broad.** The option only takes effect while the proxy is
+  enabled and its address is valid — with the plugin switched off, Emby's TLS behaviour is left
+  exactly as it was found. But while it is in effect it covers *every* outbound connection the Emby
+  core makes: the proxy itself, the destinations tunnelled through it, and the destinations that go
+  out directly because they are on the bypass list — Emby's licensing hosts among them. A
+  certificate callback is handed the TLS handshake, not the request that triggered it, so the plugin
+  cannot narrow this any further. Only enable it when the proxy uses a self-signed certificate.
 * **Credentials are stored in plain text.** Emby persists plugin options as JSON under
   `/config/plugins/configurations/`. The password field is masked in the UI, not in the file.
 * **Bound to an internal Emby method.** The patched method is not public API, so an Emby update can

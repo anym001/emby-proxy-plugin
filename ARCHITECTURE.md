@@ -66,7 +66,42 @@ the handler in a `DelegatingHandler` that can actively refuse a request. This is
 `CoreHttpClientManager` only ever passes the result to `new HttpClient(handler)` and never casts it.
 
 `ProxyState.Decide` is the single routing authority behind both: the proxy and the gate must never
-reach different verdicts for the same destination.
+reach different verdicts for the same destination. Callers that need the verdict *and* the settings
+it rests on pass one snapshot into `Decide` rather than reading `ProxyState.Settings` again around
+the call — two reads can straddle a configuration change and apply one snapshot's verdict to
+another's endpoint.
+
+The gate is also why `Decorate` separates configuring the inner handler from wrapping it. Assigning
+`Proxy` to a `SocketsHttpHandler` that has already served a request throws, and letting that failure
+skip the wrap would hand Emby a bare handler with neither a proxy nor a gate — under fail-closed a
+silent fail-open, the one outcome the plugin exists to prevent. So the gate goes on either way and
+the failure is surfaced as a third patch state on the settings page, between "Active" and "NOT
+active".
+
+## Certificate validation
+
+`SocketsHttpHandler.SslOptions.RemoteCertificateValidationCallback` is what the "ignore certificate
+validation" option acts on, and two constraints shape how it is installed.
+
+It must be **read per callback, not captured**. The handler's properties freeze after its first
+request, so a value snapshotted at decoration time could never be revised and toggling the option
+would need a server restart — the same reason `DynamicWebProxy` exists.
+
+It must **not simply overwrite what is already there**. Emby may install a callback of its own;
+replacing it outright would silently drop the server's own policy. The plugin therefore captures the
+existing callback and delegates to it for everything it does not have an opinion about, falling back
+to `errors == SslPolicyErrors.None` when there is none.
+
+The relaxation itself is gated on the proxy being enabled *and* its address parsing, because the
+option exists for proxies presenting a self-signed certificate: with no proxy in play there is
+nothing for it to excuse, and a disabled plugin has to leave Emby's TLS behaviour untouched.
+
+What this still cannot do is distinguish connections. The callback receives the handshake, not the
+request that triggered it, so while the option is in effect it also covers destinations that go out
+directly because they are on the bypass list — Emby's licensing hosts among them. Narrowing that
+would mean correlating a handshake back to a request through the connection pool, which is not a
+mechanism worth introducing for an option that is off by default. It is documented in README.md
+under "Known limitations" instead.
 
 ## Localization
 

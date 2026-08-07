@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Net;
 using EmbyProxyRouter.Localization;
 
@@ -86,7 +87,7 @@ namespace EmbyProxyRouter.Proxy
                 }
 
                 host = parsed.Host;
-                port = parsed.IsDefaultPort ? -1 : parsed.Port;
+                port = AuthorityHasPort(address) ? parsed.Port : -1;
 
                 if (!string.IsNullOrEmpty(parsed.UserInfo))
                 {
@@ -107,9 +108,14 @@ namespace EmbyProxyRouter.Proxy
                 }
 
                 host = address.Substring(0, colon);
-                if (!int.TryParse(address.Substring(colon + 1), out port))
+
+                // Invariant and digits-only: the current culture must not decide what a port looks
+                // like, and the default NumberStyles.Integer would accept " -1" as a port and let it
+                // fall through to the "no explicit port" branch below with the wrong message.
+                var portText = address.Substring(colon + 1);
+                if (!int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out port))
                 {
-                    error = Localizer.Format("ErrPortNotNumber", address.Substring(colon + 1));
+                    error = Localizer.Format("ErrPortNotNumber", portText);
                     return false;
                 }
             }
@@ -132,7 +138,20 @@ namespace EmbyProxyRouter.Proxy
                 return false;
             }
 
-            var builder = new UriBuilder(SchemeToString(scheme), host, port);
+            // UriBuilder validates lazily: the constructor takes any host string and the Uri getter
+            // is what rejects one. A TryParse that throws instead of returning false would surface
+            // as an exception out of the settings page's Validate and out of OnOptionsSaved, neither
+            // of which has anywhere to put it.
+            Uri uri;
+            try
+            {
+                uri = new UriBuilder(SchemeToString(scheme), host, port).Uri;
+            }
+            catch (Exception)
+            {
+                error = Localizer.Format("ErrInvalidHost", host);
+                return false;
+            }
 
             NetworkCredential credential = null;
             if (!string.IsNullOrWhiteSpace(username))
@@ -146,11 +165,56 @@ namespace EmbyProxyRouter.Proxy
 
             endpoint = new ProxyEndpoint
             {
-                Uri = builder.Uri,
+                Uri = uri,
                 Credential = credential,
                 Scheme = scheme
             };
             return true;
+        }
+
+        /// <summary>
+        /// Whether the address text itself names a port.
+        /// </summary>
+        /// <remarks>
+        /// This cannot be asked of the parsed <see cref="Uri"/>, which normalises a default port
+        /// away: <c>new Uri("https://p:443/").IsDefaultPort</c> is true and the result is
+        /// indistinguishable from <c>https://p/</c>. Deriving "the user gave no port" from
+        /// <c>IsDefaultPort</c> therefore rejected <c>https://host:443</c> and <c>http://host:80</c>
+        /// by telling the user to supply the port they had just supplied. The raw text is the only
+        /// place the distinction survives.
+        /// </remarks>
+        private static bool AuthorityHasPort(string address)
+        {
+            var start = address.IndexOf("://", StringComparison.Ordinal) + 3;
+            if (start >= address.Length)
+            {
+                return false;
+            }
+
+            var authority = address.Substring(start);
+
+            var end = authority.IndexOfAny(new[] { '/', '?', '#' });
+            if (end >= 0)
+            {
+                authority = authority.Substring(0, end);
+            }
+
+            var at = authority.LastIndexOf('@');
+            if (at >= 0)
+            {
+                authority = authority.Substring(at + 1);
+            }
+
+            var colon = authority.LastIndexOf(':');
+            if (colon < 0 || colon == authority.Length - 1)
+            {
+                return false;
+            }
+
+            // An IPv6 literal is bracketed, and every colon inside those brackets belongs to the
+            // address rather than introducing a port.
+            var bracket = authority.LastIndexOf(']');
+            return colon > bracket;
         }
 
         private static bool TryMapScheme(string value, out ProxyScheme scheme)

@@ -67,11 +67,19 @@ jobs:
       # running against that merge - testing the merge result is the point of a
       # pull-request run - but anything labelled with a commit uses the one that
       # was actually pushed, so it can be traced back to one.
+      # Values reach the shell through the environment, never through `${{ }}`
+      # inside the script. An expression is expanded into the script text before
+      # bash ever sees it, so a crafted input would be run as script rather than
+      # read as data - and this job is reachable from a dispatch whose version
+      # comes from release-check.yml, i.e. from a tag name upstream of us.
       - name: Resolve the build inputs
         id: ctx
+        env:
+          REQUESTED_VERSION: ${{ inputs.emby-version }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          version="${{ inputs.emby-version }}"
+          version="$REQUESTED_VERSION"
           if [ -z "$version" ]; then
             version="$(tr -d '[:space:]' < build/emby-version.txt)"
             echo "No version requested - using the pinned $version"
@@ -79,7 +87,7 @@ jobs:
             echo "Building against the requested $version"
           fi
 
-          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          sha="$HEAD_SHA"
           echo "Commit under test: $sha"
 
           {
@@ -114,7 +122,9 @@ jobs:
           key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
 
       - name: Fetch Emby assemblies
-        run: bash build/fetch-emby-refs.sh "${{ steps.ctx.outputs.version }}"
+        env:
+          EMBY_VERSION: ${{ steps.ctx.outputs.version }}
+        run: bash build/fetch-emby-refs.sh "$EMBY_VERSION"
 
       # The check that actually matters when moving to a new Emby version.
       # Compiling proves little on its own: the four referenced API assemblies

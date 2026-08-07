@@ -62,8 +62,12 @@ namespace EmbyProxyRouter.Proxy
                 return null;
             }
 
+            // One snapshot for the verdict and for the follow-up question below, so the two cannot
+            // straddle a configuration change and disagree about the same request.
+            var settings = _state.Settings;
+
             string reason;
-            var decision = _state.Decide(uri, out reason);
+            var decision = _state.Decide(settings, uri, out reason);
 
             switch (decision)
             {
@@ -75,7 +79,6 @@ namespace EmbyProxyRouter.Proxy
                 case RouteDecision.Direct:
                     // Only worth a warning when the proxy was supposed to handle this and could not.
                     // Bypass-list hits and a disabled plugin are expected, not incidents.
-                    var settings = _state.Settings;
                     if (settings.Enabled && !settings.Bypass.IsBypassed(uri))
                     {
                         _logger.Warn(Localizer.Format("FailOpenMessage", Redact(uri), reason));

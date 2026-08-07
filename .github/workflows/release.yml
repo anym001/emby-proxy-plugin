@@ -86,7 +86,9 @@ jobs:
           key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
 
       - name: Fetch Emby assemblies
-        run: bash build/fetch-emby-refs.sh "${{ steps.ctx.outputs.version }}"
+        env:
+          EMBY_VERSION: ${{ steps.ctx.outputs.version }}
+        run: bash build/fetch-emby-refs.sh "$EMBY_VERSION"
 
       - name: Verify the patch target
         run: |

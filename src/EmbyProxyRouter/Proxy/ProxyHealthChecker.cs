@@ -55,6 +55,11 @@ namespace EmbyProxyRouter.Proxy
 
         public void Start()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             if (_timer == null)
             {
                 _timer = new Timer(OnTick, null, Timeout.Infinite, Timeout.Infinite);
@@ -93,6 +98,11 @@ namespace EmbyProxyRouter.Proxy
 
         public async Task<ProxyHealth> CheckNowAsync(CancellationToken cancellationToken)
         {
+            if (_disposed)
+            {
+                return _state.Health;
+            }
+
             // Skip rather than queue: overlapping probes would only produce duplicate log noise.
             if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
             {
@@ -288,15 +298,26 @@ namespace EmbyProxyRouter.Proxy
             }
         }
 
+        /// <summary>
+        /// Stops the cadence. A probe already in flight is left to finish.
+        /// </summary>
+        /// <remarks>
+        /// <c>_gate</c> is deliberately not disposed. Dispose runs on the entry point's shutdown
+        /// path while a probe may still be awaiting a socket, and disposing the semaphore under it
+        /// would make the <c>Release</c> in <see cref="CheckNowAsync"/>'s finally block throw on a
+        /// fire-and-forget task nobody observes. A SemaphoreSlim only holds a disposable resource
+        /// once its AvailableWaitHandle has been used, which this one never does.
+        /// </remarks>
         public void Dispose()
         {
             _disposed = true;
-            if (_timer != null)
+
+            var timer = _timer;
+            _timer = null;
+            if (timer != null)
             {
-                _timer.Dispose();
-                _timer = null;
+                timer.Dispose();
             }
-            _gate.Dispose();
         }
 
         private sealed class FixedProxy : IWebProxy
