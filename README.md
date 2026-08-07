@@ -158,35 +158,26 @@ English. Pull requests with translations are welcome — see [CONTRIBUTING.md](C
 
 ## Known limitations
 
-* **Live TV is only partially covered.** `Emby.LiveTV.dll` uses both the central `IHttpClient`
-  (which is redirected) and its own handler instances (which are **not**). If you use Live TV, do not
-  assume that traffic goes through the proxy in full. Special handling for it is deliberately not
-  built in.
-* **The bypass list performs no DNS resolution.** Hostnames are matched literally and IP rules only
-  apply to IP literals. Resolving would emit a DNS lookup for every request — exactly the visibility
-  the plugin exists to avoid.
+* **Live TV is only partially covered.** Some of its traffic uses HTTP handlers the plugin does not
+  reach, so do not assume Live TV goes through the proxy in full.
+* **The bypass list performs no DNS resolution.** Hostnames are matched literally, and IP rules only
+  apply to IP literals.
 * **HTTP(S) proxy authentication is reactive.** .NET sends credentials only after the proxy answers
-  `407`, not pre-emptively. Proxies that reject outright without issuing a challenge will not work.
+  `407`. A proxy that rejects outright without issuing a challenge will not work.
 * **The settings-page check cannot prove the proxy forwards traffic.** It establishes that the proxy
-  answers, and for SOCKS5 that it accepts your credentials — everything that can be established
-  without asking the proxy to connect somewhere on your behalf. A proxy that authenticates and then
-  refuses every request still shows as working.
-* **"Ignore certificate validation" is broad.** The option only takes effect while the proxy is
-  enabled and its address is valid — with the plugin switched off, Emby's TLS behaviour is left
-  exactly as it was found. But while it is in effect it covers *every* outbound connection the Emby
-  core makes: the proxy itself, the destinations tunnelled through it, and the destinations that go
-  out directly because they are on the bypass list. A certificate callback is handed the TLS
-  handshake, not the request that triggered it, so the plugin cannot narrow this any further. Only
-  enable it when the proxy uses a self-signed certificate.
+  answers, and for SOCKS5 that it accepts your credentials. One that authenticates and then refuses
+  every request still shows as working.
+* **"Ignore certificate validation" is broad.** While in effect it covers *every* outbound connection
+  the Emby core makes — not only the proxy, but the destinations tunnelled through it and those on
+  the bypass list. Only enable it when the proxy uses a self-signed certificate.
 * **Credentials are stored in plain text.** Emby persists plugin options as JSON under
   `/config/plugins/configurations/`. The password field is masked in the UI, not in the file.
 * **Bound to an internal Emby method.** The patched method is not public API, so an Emby update can
-  change it at any time. The plugin verifies the signature at startup and reports a mismatch loudly
-  instead of silently doing nothing — but it cannot repair one.
-* **Emby Premiere validation depends on the proxy.** Licence traffic goes through the proxy, so an
-  unreachable proxy stops Premiere from validating along with everything else, and the proxy's
-  egress address is what Emby's licensing servers see. If that is not what you want, put
-  `mb3admin.com`, `*.mb3admin.com` and `connect.emby.media` in the bypass list.
+  change it. The plugin verifies it at startup and reports a mismatch, but cannot repair one.
+* **Emby Premiere validation depends on the proxy.** Licence traffic goes through it, so an
+  unreachable proxy stops Premiere validating, and Emby's licensing servers see the proxy's egress
+  address. Put `mb3admin.com`, `*.mb3admin.com` and `connect.emby.media` in the bypass list if that
+  is not what you want.
 
 ## Further reading
 
