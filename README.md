@@ -52,16 +52,6 @@ Harmony patch active on HttpMessageHandler ApplicationHost.CreateHttpClientHandl
 Proxy Router: enabled - socks5://192.168.1.10:1080 (auth as user) | private networks bypassed
 ```
 
-## Upgrading from a version before the private-networks switch
-
-Earlier builds always bypassed RFC1918, link-local and `*.local`. That is now the
-**"Bypass proxy for private networks"** setting, and it is **off** by default.
-
-An options file written before the setting existed carries no such field, so it lands on the
-default: those servers start sending LAN traffic through the proxy, and lose their own network
-whenever the proxy is down — another Emby server, a DLNA endpoint, a local metadata cache. If that
-is not what you want, switch the setting on after upgrading. Loopback is unaffected either way.
-
 ## Configuration
 
 | Field | Meaning |

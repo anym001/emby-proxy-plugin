@@ -11,11 +11,9 @@ namespace EmbyProxyRouter.Tests
         /// The switch defaults to off: everything goes through the proxy unless asked otherwise.
         /// </summary>
         /// <remarks>
-        /// This is also the migration behaviour, and worth pinning for that reason. An options file
-        /// written before the switch existed carries no such field, so deserialization leaves the
-        /// property at its default — meaning those servers start sending LAN traffic through the
-        /// proxy on upgrade. README.md says so under Upgrading; if this test is ever flipped, that
-        /// note has to move with it.
+        /// Also the migration behaviour, which is why it is pinned rather than left implicit: an
+        /// options file written before the switch existed carries no such field, so deserialization
+        /// leaves the property at its default and that installation starts proxying LAN traffic.
         /// </remarks>
         [Fact]
         public void PrivateNetworksAreProxiedByDefault()
