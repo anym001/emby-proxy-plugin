@@ -57,7 +57,7 @@
     DLL dropped into /config/plugins, which is what the Emby plugin folder expects.
   -->
   <ItemGroup>
-    <PackageReference Include="Lib.Harmony" Version="2.3.6" GeneratePathProperty="true">
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" GeneratePathProperty="true">
       <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
