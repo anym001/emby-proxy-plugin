@@ -43,8 +43,6 @@ namespace EmbyProxyRouter
         public Plugin(IApplicationHost applicationHost)
             : base(applicationHost)
         {
-            Instance = this;
-
             try
             {
                 // Inside the try as well: resolving the log manager is the one step whose failure
@@ -72,8 +70,6 @@ namespace EmbyProxyRouter
                 }
             }
         }
-
-        public static Plugin Instance { get; private set; }
 
         public override string Name
         {
@@ -112,11 +108,6 @@ namespace EmbyProxyRouter
         public Stream GetThumbImage()
         {
             return typeof(Plugin).Assembly.GetManifestResourceStream(ThumbResource);
-        }
-
-        internal PluginOptions CurrentOptions
-        {
-            get { return GetOptions(); }
         }
 
         protected override PluginOptions OnBeforeShowUI(PluginOptions options)

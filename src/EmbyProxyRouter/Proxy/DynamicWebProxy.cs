@@ -56,7 +56,7 @@ namespace EmbyProxyRouter.Proxy
             // with an endpoint that is already null.
             var settings = _state.Settings;
 
-            string reason;
+            RouteReason reason;
             switch (_state.Decide(settings, destination, out reason))
             {
                 case RouteDecision.ViaProxy:

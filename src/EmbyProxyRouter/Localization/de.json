@@ -39,7 +39,7 @@
   "DescCheckUrlHttps": "Prüft, ob der Proxy einen CONNECT-Tunnel öffnet – über diesen Weg läuft nahezu der gesamte Emby-Traffic. Ein Proxy kann HTTP weiterleiten und CONNECT trotzdem verweigern; deshalb wird beides geprüft und beides muss erfolgreich sein. Beide Felder leer lassen, um nur die TCP-Verbindung zu prüfen.",
 
   "LabelCheckInterval": "Prüfintervall (Sekunden)",
-  "DescCheckInterval": "Mindestens 10 Sekunden.",
+  "DescCheckInterval": "Zwischen {0} und {1} Sekunden.",
 
   "PatchCaption": "Patch",
   "PatchActive": "Aktiv – Traffic des Emby-Kerns läuft über dieses Plugin.",
@@ -85,6 +85,7 @@
 
   "BlockedMessage": "Proxy nicht erreichbar – Request blockiert: {0} ({1}). Fail-Closed ist aktiv.",
   "FailOpenMessage": "Fail-Open aktiv – Request geht DIREKT raus, ohne Proxy: {0} ({1})",
+  "SuppressedSuffix": " [+{0} gleichartige in den letzten {1} s]",
 
   "AuthNone": "ohne Auth",
   "AuthAs": "Auth als {0}",
@@ -103,6 +104,7 @@
   "ErrInvalidIp": "Ungültige IP-Adresse in: {0}",
   "ErrInvalidPrefix": "Ungültige Präfixlänge in: {0}",
   "ErrPrefixFamily": "Präfixlänge passt nicht zur Adressfamilie: {0}",
-  "ErrIntervalMin": "Das Prüfintervall muss mindestens 10 Sekunden betragen.",
+  "ErrIntervalMin": "Das Prüfintervall muss mindestens {0} Sekunden betragen.",
+  "ErrIntervalMax": "Das Prüfintervall darf höchstens {0} Sekunden betragen.",
   "ErrCheckUrlScheme": "Diese URL muss mit {0} beginnen"
 }

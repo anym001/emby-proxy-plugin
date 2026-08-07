@@ -65,7 +65,7 @@ Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as use
 | **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Private and link-local networks are compiled in and always bypassed — see below. |
 | **Check URL (HTTP)** | Tests whether the proxy forwards plain HTTP. Must answer 2xx; redirects are not followed and therefore fail. Empty = skip. |
 | **Check URL (HTTPS)** | Tests whether the proxy opens a CONNECT tunnel — the path almost all Emby traffic takes. Both checks must succeed. Both fields empty = TCP check only. |
-| **Check interval** | Seconds between reachability checks, minimum 10. |
+| **Check interval** | Seconds between reachability checks. Between 10 and 3600; values outside that range are clamped, including ones edited straight into the options file. |
 
 ### Fail-closed vs. fail-open
 
@@ -86,6 +86,18 @@ WARN  Fail-open active - request is going out DIRECTLY, without the proxy: https
 ```
 
 The active policy is shown as its own status line at the top of the settings page.
+
+**Repeated warnings are collapsed, never dropped.** A library scan against a dead proxy would
+otherwise write one identical line per lookup and bury the first one. Each destination and reason is
+logged immediately the first time, then at most once a minute, with the number of occurrences left
+out stated on the next line:
+
+```
+WARN  Proxy unreachable - request blocked: https://api.themoviedb.org (proxy is unreachable). Fail-closed is active. [+2417 identical in the last 60 s]
+```
+
+This affects the log only. Every blocked request is still blocked, and still fails with its own
+message.
 
 ### What is always bypassed
 

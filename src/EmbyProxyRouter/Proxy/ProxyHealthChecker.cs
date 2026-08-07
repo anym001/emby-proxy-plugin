@@ -14,9 +14,10 @@ namespace EmbyProxyRouter.Proxy
     /// Decides whether the proxy is actually usable, on a timer and on demand.
     /// </summary>
     /// <remarks>
-    /// Builds its own SocketsHttpHandler for every probe, so it never travels through the patched
-    /// Emby pipeline. If it used the gated pipeline, a fail-closed block would prevent the very
-    /// request that is supposed to determine whether the block should still apply.
+    /// Builds its own SocketsHttpHandler, so probes never travel through the patched Emby pipeline.
+    /// If they used the gated pipeline, a fail-closed block would prevent the very request that is
+    /// supposed to determine whether the block should still apply. The handler is kept for as long
+    /// as the configuration it was built from — see <see cref="GetProbeHandler"/>.
     /// </remarks>
     public sealed class ProxyHealthChecker : IDisposable
     {
@@ -40,12 +41,27 @@ namespace EmbyProxyRouter.Proxy
         private static readonly TimeSpan TcpTimeout = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(10);
 
+        /// <summary>
+        /// Keeps a pooled connection to the proxy alive across check cycles.
+        /// </summary>
+        /// <remarks>
+        /// Comfortably longer than any sane check interval, so consecutive cycles reuse the
+        /// connection rather than reconnecting. The interval is capped at an hour, which this does
+        /// not cover — a cadence that slow reconnects, which is the right trade at that point.
+        /// </remarks>
+        private static readonly TimeSpan ProbeIdleTimeout = TimeSpan.FromMinutes(5);
+
         private readonly ProxyState _state;
         private readonly ILogger _logger;
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
 
         private Timer _timer;
         private bool _disposed;
+
+        // The handler the probes run on, plus the settings snapshot it was built for. Both are only
+        // ever touched while _gate is held, so they need no synchronisation of their own.
+        private SocketsHttpHandler _probeHandler;
+        private ProxySettings _probeSettings;
 
         public ProxyHealthChecker(ProxyState state, ILogger logger)
         {
@@ -112,6 +128,8 @@ namespace EmbyProxyRouter.Proxy
             try
             {
                 var settings = _state.Settings;
+
+                DiscardProbeHandlerUnless(settings);
 
                 if (!settings.Enabled)
                 {
@@ -224,8 +242,7 @@ namespace EmbyProxyRouter.Proxy
             var started = DateTime.UtcNow;
             try
             {
-                using (var handler = CreateProbeHandler(settings))
-                using (var client = new HttpClient(handler, disposeHandler: false))
+                using (var client = new HttpClient(GetProbeHandler(settings), disposeHandler: false))
                 using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                 {
                     client.Timeout = HttpTimeout;
@@ -253,15 +270,39 @@ namespace EmbyProxyRouter.Proxy
             }
         }
 
-        private static SocketsHttpHandler CreateProbeHandler(ProxySettings settings)
+        /// <summary>
+        /// The probe handler for this settings snapshot, built once and reused.
+        /// </summary>
+        /// <remarks>
+        /// A fresh handler per probe meant a fresh connection to the proxy for every check URL of
+        /// every cycle — two full connects a minute at the default cadence, none of them reused,
+        /// each one a TCP handshake (and for the HTTPS probe a TLS one) that the pool already had an
+        /// answer for. Reusing one handler is also a slightly better test: it exercises the proxy
+        /// the way Emby's own traffic uses it, over a pooled connection rather than a cold one.
+        ///
+        /// Keyed on the settings instance by reference, which is sound precisely because
+        /// <see cref="ProxySettings"/> is immutable and replaced wholesale — a changed configuration
+        /// is necessarily a different object, and it must not keep probing through a handler built
+        /// for the old proxy or the old certificate policy. Called only under <c>_gate</c>, so the
+        /// swap can never pull the handler out from under a probe in flight.
+        /// </remarks>
+        private SocketsHttpHandler GetProbeHandler(ProxySettings settings)
         {
+            DiscardProbeHandlerUnless(settings);
+
+            if (_probeHandler != null)
+            {
+                return _probeHandler;
+            }
+
             var handler = new SocketsHttpHandler
             {
                 // Always proxy, ignoring the bypass list: the point is to test the proxy itself.
                 Proxy = new FixedProxy(settings.Endpoint),
                 UseProxy = true,
                 AllowAutoRedirect = false,
-                ConnectTimeout = TcpTimeout
+                ConnectTimeout = TcpTimeout,
+                PooledConnectionIdleTimeout = ProbeIdleTimeout
             };
 
             if (settings.IgnoreCertificateValidation)
@@ -269,7 +310,29 @@ namespace EmbyProxyRouter.Proxy
                 handler.SslOptions.RemoteCertificateValidationCallback = (a, b, c, d) => true;
             }
 
+            _probeHandler = handler;
+            _probeSettings = settings;
             return handler;
+        }
+
+        /// <summary>
+        /// Drops the cached handler when it was built for a different configuration.
+        /// </summary>
+        /// <remarks>
+        /// Called from <see cref="CheckNowAsync"/> as well as from <see cref="GetProbeHandler"/>,
+        /// because switching the proxy off returns before any probe runs and would otherwise leave
+        /// the old handler — and its open connection to the old proxy — sitting there indefinitely.
+        /// </remarks>
+        private void DiscardProbeHandlerUnless(ProxySettings settings)
+        {
+            if (_probeHandler == null || ReferenceEquals(_probeSettings, settings))
+            {
+                return;
+            }
+
+            _probeHandler.Dispose();
+            _probeHandler = null;
+            _probeSettings = null;
         }
 
         private void Update(ProxyHealth health, string detail)
@@ -307,6 +370,12 @@ namespace EmbyProxyRouter.Proxy
         /// would make the <c>Release</c> in <see cref="CheckNowAsync"/>'s finally block throw on a
         /// fire-and-forget task nobody observes. A SemaphoreSlim only holds a disposable resource
         /// once its AvailableWaitHandle has been used, which this one never does.
+        ///
+        /// The probe handler is disposed only if the gate is free, i.e. no probe is running. Taking
+        /// it from a live probe would surface as an ObjectDisposedException inside
+        /// <see cref="CheckNowAsync"/>, whose catch-all would dutifully log the server "unreachable"
+        /// while the server is shutting down. Losing the handler to the garbage collector instead is
+        /// the cheaper mistake: its connections idle out on their own.
         /// </remarks>
         public void Dispose()
         {
@@ -317,6 +386,25 @@ namespace EmbyProxyRouter.Proxy
             if (timer != null)
             {
                 timer.Dispose();
+            }
+
+            if (!_gate.Wait(0))
+            {
+                return;
+            }
+
+            try
+            {
+                if (_probeHandler != null)
+                {
+                    _probeHandler.Dispose();
+                    _probeHandler = null;
+                    _probeSettings = null;
+                }
+            }
+            finally
+            {
+                _gate.Release();
             }
         }
 

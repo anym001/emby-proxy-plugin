@@ -39,6 +39,23 @@ namespace EmbyProxyRouter.Patch
         private const string MethodName = "CreateHttpClientHandler";
         private const string HarmonyId = "org.embyproxyrouter.plugin";
 
+        /// <summary>
+        /// How long the gate collapses identical routing warnings for.
+        /// </summary>
+        /// <remarks>
+        /// One minute is chosen against the failure it exists for: a library scan issuing thousands
+        /// of lookups against a dead proxy. Short enough that the log still shows the problem is
+        /// ongoing rather than a one-off, long enough that a scan produces a handful of lines per
+        /// destination instead of one per request.
+        /// </remarks>
+        private static readonly TimeSpan WarningWindow = TimeSpan.FromMinutes(1);
+
+        /// <summary>
+        /// One throttle for every gate. Emby caches a handler per host, so a per-instance throttle
+        /// would see one destination each and collapse nothing.
+        /// </summary>
+        private static readonly LogThrottle Throttle = new LogThrottle(WarningWindow);
+
         private static ProxyState _state;
         private static DynamicWebProxy _proxy;
         private static ILogger _logger;
@@ -213,7 +230,7 @@ namespace EmbyProxyRouter.Patch
                 }
             }
 
-            return new ProxyGateHandler(handler, _state, _logger);
+            return new ProxyGateHandler(handler, _state, _logger, Throttle);
         }
 
         private static void Configure(HttpMessageHandler handler)

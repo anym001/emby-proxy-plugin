@@ -71,6 +71,27 @@ it rests on pass one snapshot into `Decide` rather than reading `ProxyState.Sett
 the call — two reads can straddle a configuration change and apply one snapshot's verdict to
 another's endpoint.
 
+`Decide` hands back a `RouteReason` code, not a message. It runs up to twice per outbound request,
+and the caller that only wants the verdict — the resolver's bypass check — would otherwise pay for a
+culture lookup and a dictionary read it discards. `ProxyState.Explain` turns a reason into text at
+the point a line is actually written, which also keeps the routing core independent of the
+localization layer. The reason itself is not optional: a user running fail-open has to be able to
+see in the log that a request went out directly *because* the proxy was down.
+
+### Why the warnings are throttled
+
+The gate writes a warning per blocked or fail-open request, which is right for one request and wrong
+for a library scan — a few thousand lookups against a dead proxy bury the first line, the one that
+mattered, under a few thousand identical ones. `LogThrottle` collapses them to one line per
+destination and reason per minute, shared across every gate instance because Emby caches a handler
+per host and a per-instance throttle would see one destination each.
+
+It is deliberately biased towards logging, because "never silently" is the property the plugin is
+built around and it would be perverse to break it in the logging: the first sighting of a key is
+never suppressed, suppressed occurrences are counted and reported on the next line the key produces,
+and a full key map logs untracked rather than dropping. Throttling never applies to enforcement —
+every blocked request still fails, and still carries its own explanation to its caller.
+
 The gate is also why `Decorate` separates configuring the inner handler from wrapping it. Assigning
 `Proxy` to a `SocketsHttpHandler` that has already served a request throws, and letting that failure
 skip the wrap would hand Emby a bare handler with neither a proxy nor a gate — under fail-closed a
@@ -102,6 +123,29 @@ directly because they are on the bypass list — Emby's licensing hosts among th
 would mean correlating a handshake back to a request through the connection pool, which is not a
 mechanism worth introducing for an option that is off by default. It is documented in README.md
 under "Known limitations" instead.
+
+## The reachability check
+
+`ProxyHealthChecker` builds its **own** `SocketsHttpHandler` and never travels through the patched
+Emby pipeline. If it used the gated pipeline, a fail-closed block would prevent the very request
+meant to determine whether the block should still apply. Its proxy is a `FixedProxy` that ignores
+the bypass list, because the point is to test the proxy itself.
+
+That handler is built once per configuration and reused, keyed on the `ProxySettings` instance by
+reference — sound precisely because the snapshot is immutable and replaced wholesale, so a changed
+configuration is necessarily a different object and cannot keep probing through a handler built for
+the old proxy. A handler per probe meant a fresh connection for every check URL of every cycle, none
+of them reused; reusing one also exercises the proxy the way Emby's own traffic does, over a pooled
+connection rather than a cold one.
+
+It is disposed on a configuration change, and on shutdown only if no probe is in flight. Taking it
+from a live probe would surface as an `ObjectDisposedException` inside `CheckNowAsync`, whose
+catch-all would dutifully report the proxy unreachable while the server is shutting down; losing the
+handler to the garbage collector is the cheaper mistake.
+
+Both check URLs must answer 2xx. A first-success-wins pass would stop at the plain-HTTP entry and
+never exercise the CONNECT tunnel, so a proxy that forwards HTTP and refuses CONNECT would report
+healthy while nearly all of Emby's traffic failed.
 
 ## Localization
 
@@ -177,6 +221,7 @@ Requirements: **.NET SDK 8.0** plus `curl`, `ar` and `tar`.
 ./build/fetch-emby-refs.sh                                       # once, populates lib/
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
 ./build/verify-single-dll.sh
+dotnet test -c Release tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 ```
 
 Result: `src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll` — a **single** file. Harmony is
@@ -221,8 +266,7 @@ deliverable are separate events.** Pull requests are verified; only a tag ships.
 
 ### `ci.yml` — every pull request
 
-There is no test project in this repository, so this workflow is what stands in for one. It is not
-"the build" — it never publishes anything — it is the set of assertions that a change is sound:
+Not "the build" — it never publishes anything — but the set of assertions that a change is sound:
 
 * `actionlint` on the workflows. A typo in an expression or a step key is caught in seconds instead
   of by a run that took minutes to get there.
@@ -232,9 +276,36 @@ There is no test project in this repository, so this workflow is what stands in 
 * `build/verify-single-dll.sh` — the output is still one self-contained file: no `0Harmony.dll` next
   to it, not suspiciously small. That property is what makes deployment a one-file copy, and it
   would otherwise break silently.
+* `dotnet test` on `tests/EmbyProxyRouter.Tests` — the plugin's own logic (see below).
 
-The last two are scripts rather than inline steps because `release.yml` runs the same ones. A
-release therefore cannot ship an output that a pull request would have rejected.
+Those checks answer two different questions and neither substitutes for the other. The tests decide
+whether the logic is right; the rest decide whether the plugin still fits the server it plugs into.
+A green test run says nothing about whether the Harmony patch applies.
+
+The two verify scripts are scripts rather than inline steps because `release.yml` runs the same
+ones, and the test step is repeated there for the same reason. A release cannot ship something a
+pull request would have rejected.
+
+### The test project
+
+`tests/EmbyProxyRouter.Tests` (xUnit, `net8.0`) covers what is decidable without a server, which is
+most of the logic that has actually been wrong: `ProxyEndpoint.TryParse`, `BypassRules`,
+`ProxyState.Decide` and `Explain`, `DynamicWebProxy`, `ProxyGateHandler` against a stub inner
+handler and a recording logger, `LogThrottle`, and the `ProxySettings` clamps. All of it is pure
+functions over their inputs — no network, no Emby host, no Harmony.
+
+It references the plugin project and, unlike the plugin, copies the Emby assemblies into its own
+output with `Private=true`: a test host has no server to supply them. `lib/` still has to be
+populated by `build/fetch-emby-refs.sh` first.
+
+Two things it deliberately does not cover. The **Harmony patch**, because whether
+`CreateHttpClientHandler` still has the expected shape is a fact about a shipped Emby build rather
+than about this code — `build/verify-patch-target.sh` answers that by decompiling the real assembly.
+And **real proxy traffic**, because whether a SOCKS5 server actually negotiates authentication has
+to be exercised against a server.
+
+A regression case is worth having only once it has been seen to fail. When adding one, break the fix
+on purpose and confirm it goes red before committing it.
 
 It also runs on manual dispatch with an Emby version as input; given none, it uses the pinned
 `build/emby-version.txt`. The version is the cache key for the fetched assemblies, so only the first
@@ -370,10 +441,10 @@ go through the proxy and keeps working under fail-closed.
 ## Project layout
 
 ```
-.github/workflows/ci.yml            actionlint + compile + the two verify scripts (pull requests)
+.github/workflows/ci.yml            actionlint + compile + the verify scripts + tests (pull requests)
 .github/workflows/release.yml       Builds and publishes the DLL to a GitHub Release (tags v*)
 .github/workflows/release-check.yml Finds newer Emby releases, dispatches a CI run against them
-.github/dependabot.yml              Updates for the workflow actions and Lib.Harmony
+.github/dependabot.yml              Updates for the workflow actions, Lib.Harmony and the test tooling
 .github/ISSUE_TEMPLATE/             Bug report, feature request, private security link
 .github/PULL_REQUEST_TEMPLATE.md    Checklist covering the traps in CONTRIBUTING.md
 ARCHITECTURE.md                     This file
@@ -400,6 +471,17 @@ src/EmbyProxyRouter/
   Proxy/ProxyState.cs         Routing decision, in one place
   Proxy/DynamicWebProxy.cs    IWebProxy, consulted per request
   Proxy/ProxyGateHandler.cs   Fail-closed enforcement and logging
+  Proxy/LogThrottle.cs        Collapses a repeated warning to one line per key per window
   Proxy/ProxyHealthChecker.cs Reachability checking
   Proxy/ProxyRuntime.cs       Holds the singletons together
+tests/EmbyProxyRouter.Tests/
+  Fakes.cs                    Recording logger and stub inner handler
+  ProxyEndpointTests.cs       Address parsing, ports, credentials
+  BypassRulesTests.cs         Compiled-in entries, wildcards, CIDR, IPv4-mapped IPv6
+  ProxyStateTests.cs          The routing matrix and snapshot handling
+  DynamicWebProxyTests.cs     What the resolver answers for each verdict
+  ProxyGateHandlerTests.cs    Fail-closed enforcement, redaction, throttling
+  LogThrottleTests.cs         Windowing, suppressed counts, capacity behaviour
+  ProxySettingsTests.cs       Interval clamps, check-URL assembly
+  CertificatePolicyTests.cs   Scope of "ignore certificate validation"
 ```

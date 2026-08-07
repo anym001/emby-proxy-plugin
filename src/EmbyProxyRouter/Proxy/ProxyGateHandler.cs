@@ -21,12 +21,20 @@ namespace EmbyProxyRouter.Proxy
     {
         private readonly ProxyState _state;
         private readonly ILogger _logger;
+        private readonly LogThrottle _throttle;
 
-        public ProxyGateHandler(HttpMessageHandler inner, ProxyState state, ILogger logger)
+        /// <param name="throttle">
+        /// Shared across every gate instance by the patch, so the collapse is per destination rather
+        /// than per handler — Emby caches one handler per host, which would otherwise make the
+        /// throttle a no-op for exactly the case it exists for. Null disables throttling.
+        /// </param>
+        public ProxyGateHandler(
+            HttpMessageHandler inner, ProxyState state, ILogger logger, LogThrottle throttle)
             : base(inner)
         {
             _state = state;
             _logger = logger;
+            _throttle = throttle;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -66,28 +74,81 @@ namespace EmbyProxyRouter.Proxy
             // straddle a configuration change and disagree about the same request.
             var settings = _state.Settings;
 
-            string reason;
+            RouteReason reason;
             var decision = _state.Decide(settings, uri, out reason);
 
             switch (decision)
             {
                 case RouteDecision.Blocked:
-                    var message = Localizer.Format("BlockedMessage", Redact(uri), reason);
-                    _logger.Warn(message);
+                    // The message is built even when the log line is suppressed: it is what the
+                    // caller gets as the failure, and every blocked request is entitled to be told
+                    // why it failed regardless of how many others failed the same way.
+                    var target = Redact(uri);
+                    var message = Localizer.Format(
+                        "BlockedMessage", target, ProxyState.Explain(reason, settings));
+
+                    int blockedSuppressed;
+                    if (ShouldLog(decision, reason, target, out blockedSuppressed))
+                    {
+                        _logger.Warn(message + SuppressedNote(blockedSuppressed));
+                    }
+
                     return new HttpRequestException(message);
 
                 case RouteDecision.Direct:
                     // Only worth a warning when the proxy was supposed to handle this and could not.
                     // Bypass-list hits and a disabled plugin are expected, not incidents.
-                    if (settings.Enabled && !settings.Bypass.IsBypassed(uri))
+                    if (settings.Enabled && reason != RouteReason.Bypassed)
                     {
-                        _logger.Warn(Localizer.Format("FailOpenMessage", Redact(uri), reason));
+                        var directTarget = Redact(uri);
+
+                        int directSuppressed;
+                        if (ShouldLog(decision, reason, directTarget, out directSuppressed))
+                        {
+                            _logger.Warn(Localizer.Format(
+                                             "FailOpenMessage",
+                                             directTarget,
+                                             ProxyState.Explain(reason, settings)) +
+                                         SuppressedNote(directSuppressed));
+                        }
                     }
+
                     return null;
 
                 default:
                     return null;
             }
+        }
+
+        /// <summary>
+        /// Whether this event should reach the log, and how many like it were suppressed.
+        /// </summary>
+        /// <remarks>
+        /// The key carries the reason as well as the destination, so a host whose verdict changes —
+        /// unreachable to misconfigured, say — reports the change immediately instead of waiting out
+        /// a window opened by the previous one.
+        /// </remarks>
+        private bool ShouldLog(RouteDecision decision, RouteReason reason, string target, out int suppressed)
+        {
+            suppressed = 0;
+
+            if (_throttle == null)
+            {
+                return true;
+            }
+
+            return _throttle.ShouldLog((int)decision + "|" + (int)reason + "|" + target, out suppressed);
+        }
+
+        private string SuppressedNote(int suppressed)
+        {
+            if (suppressed <= 0)
+            {
+                return string.Empty;
+            }
+
+            return Localizer.Format(
+                "SuppressedSuffix", suppressed, (int)_throttle.Window.TotalSeconds);
         }
 
         /// <summary>

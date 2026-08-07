@@ -27,6 +27,7 @@ scope by design, not by omission.
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
 ./build/verify-patch-target.sh                                   # needs ilspycmd
 ./build/verify-single-dll.sh
+dotnet test -c Release tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 ```
 
 Requires .NET SDK 8.0. `lib/*.dll` are proprietary Emby assemblies and are gitignored — never commit
@@ -39,7 +40,7 @@ CI is three workflows plus Dependabot, split on one principle: **verifying a cha
 deliverable are separate events.** Do not merge them back together.
 
 * `ci.yml` — pull requests against `main` plus manual dispatch with an optional `emby-version` input.
-  Lints, compiles, and runs both verify scripts. `inputs.*` is empty on `pull_request`, which is why
+  Lints, compiles, runs both verify scripts, and runs the tests. `inputs.*` is empty on `pull_request`, which is why
   the version is resolved in a step rather than in `env:`. It uploads a DLL **only on
   `workflow_dispatch`** — a candidate against a new Emby version is worth having; a pull-request
   artifact is not. Do not add the upload back to pull requests.
@@ -51,8 +52,9 @@ deliverable are separate events.** Do not merge them back together.
 * `release-check.yml` — finds Emby releases newer than the pinned version and dispatches `ci.yml`
   against them. Emby publishes stable (`4.9.x`) and beta (`4.10.0.x`) in parallel, so selection is by
   the `prerelease` flag, never by version order.
-* `.github/dependabot.yml` — grouped monthly updates for the workflow actions, and `Lib.Harmony`.
-  Nothing else is a dependency: the Emby assemblies come from the .deb, not from NuGet.
+* `.github/dependabot.yml` — grouped monthly updates for the workflow actions, `Lib.Harmony`, and the
+  test project's xunit/VSTest packages as a separate group. The Emby assemblies come from the .deb,
+  not from NuGet, and are not a Dependabot concern.
 
 The two `build/verify-*.sh` scripts exist as scripts, not inline steps, because `ci.yml` and
 `release.yml` both run them. Keep new assertions in a script for the same reason: a release must not
@@ -72,10 +74,20 @@ exercises four rarely-changing API assemblies, while the patched method is inter
 has changed before. A non-matching Harmony postfix fails **silently** — it never applies, and the
 plugin looks installed while routing nothing.
 
-There is no test project in the repository. Verification during development was done with throwaway
-harnesses (a Python SOCKS5 server plus small console apps referencing the built DLL). If you change
-routing, parsing, bypass matching, or localization, verify behaviour by actually exercising it —
-compiling is not evidence that it works.
+`tests/EmbyProxyRouter.Tests` is an xUnit project covering the parts that are decidable without a
+server: `ProxyEndpoint.TryParse`, `BypassRules`, `ProxyState.Decide`, `DynamicWebProxy`,
+`ProxyGateHandler` against a stub inner handler, `LogThrottle`, and the `ProxySettings` clamps. It
+references the plugin project and copies the Emby assemblies into its own output, since a test host
+has no server to supply them. Add cases there when you touch any of those.
+
+**A green test run is not evidence that the plugin works.** It says nothing about whether the Harmony
+patch applies — that is `verify-patch-target.sh`'s job — and nothing about real proxy traffic. The
+two kinds of check answer different questions and neither substitutes for the other. If you change
+routing, parsing, bypass matching, or localization, still exercise the behaviour for real; earlier
+verification used a Python SOCKS5 server plus small console apps against the built DLL.
+
+A test that has never failed has not been shown to test anything. When adding a regression case,
+break the fix on purpose once and confirm the case goes red.
 
 ## Architecture, and why it is shaped this way
 

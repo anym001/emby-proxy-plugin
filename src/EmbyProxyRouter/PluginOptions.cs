@@ -19,6 +19,26 @@ namespace EmbyProxyRouter
     /// </remarks>
     public class PluginOptions : EditableOptionsBase
     {
+        /// <summary>
+        /// The bounds on <see cref="HealthCheckIntervalSeconds"/>, in one place.
+        /// </summary>
+        /// <remarks>
+        /// Named constants rather than literals because three things have to agree about them: the
+        /// spinner's range on the page, the validation error, and the clamp in
+        /// <see cref="ProxySettings.FromOptions"/> that catches a value the page never saw. They did
+        /// not agree — the page advertised a 3600-second ceiling that nothing enforced, so an
+        /// interval edited straight into the options JSON was taken verbatim.
+        ///
+        /// Both ends have a reason. Below ten seconds the checks cost more than they establish, and
+        /// every one of them shows the proxy's egress address to the check URL. Above an hour a
+        /// recovered proxy stays marked unreachable — and under fail-closed, traffic stays blocked —
+        /// for long enough that the plugin looks broken rather than cautious.
+        /// </remarks>
+        public const int MinCheckIntervalSeconds = 10;
+
+        /// <summary>Upper bound on the check interval, in seconds. See <see cref="MinCheckIntervalSeconds"/>.</summary>
+        public const int MaxCheckIntervalSeconds = 3600;
+
         public override string EditorTitle
         {
             get { return Localizer.Get("EditorTitle"); }
@@ -108,8 +128,8 @@ namespace EmbyProxyRouter
 
         [DisplayNameL(nameof(Strings.LabelCheckInterval), typeof(Strings))]
         [DescriptionL(nameof(Strings.DescCheckInterval), typeof(Strings))]
-        [MinValue(10)]
-        [MaxValue(3600)]
+        [MinValue(MinCheckIntervalSeconds)]
+        [MaxValue(MaxCheckIntervalSeconds)]
         public int HealthCheckIntervalSeconds { get; set; } = 60;
 
         /// <summary>
@@ -140,10 +160,17 @@ namespace EmbyProxyRouter
             ValidateCheckUrl(context, nameof(HealthCheckUrlHttp), HealthCheckUrlHttp, "http");
             ValidateCheckUrl(context, nameof(HealthCheckUrlHttps), HealthCheckUrlHttps, "https");
 
-            if (HealthCheckIntervalSeconds < 10)
+            if (HealthCheckIntervalSeconds < MinCheckIntervalSeconds)
             {
                 context.AddValidationError(
-                    nameof(HealthCheckIntervalSeconds), Localizer.Get("ErrIntervalMin"));
+                    nameof(HealthCheckIntervalSeconds),
+                    Localizer.Format("ErrIntervalMin", MinCheckIntervalSeconds));
+            }
+            else if (HealthCheckIntervalSeconds > MaxCheckIntervalSeconds)
+            {
+                context.AddValidationError(
+                    nameof(HealthCheckIntervalSeconds),
+                    Localizer.Format("ErrIntervalMax", MaxCheckIntervalSeconds));
             }
         }
 

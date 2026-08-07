@@ -22,6 +22,31 @@ namespace EmbyProxyRouter.Proxy
     }
 
     /// <summary>
+    /// Why <see cref="ProxyState.Decide(ProxySettings, Uri, out RouteReason)"/> reached its verdict.
+    /// </summary>
+    /// <remarks>
+    /// A code rather than a message. <c>Decide</c> runs up to twice per outbound request and the
+    /// caller that only wants the verdict — the proxy resolver's bypass check — would otherwise pay
+    /// for a culture lookup and a dictionary read whose result it discards. Translating at the point
+    /// a log line is actually written also keeps the routing core free of the localization layer,
+    /// which it has no other reason to know about. Turn one of these into text with
+    /// <see cref="ProxyState.Explain"/>.
+    /// </remarks>
+    public enum RouteReason
+    {
+        /// <summary>The plugin is switched off; Emby behaves as if it were not installed.</summary>
+        Disabled = 0,
+        /// <summary>Enabled, but the configured address does not parse.</summary>
+        Misconfigured = 1,
+        /// <summary>The destination is on the bypass list, compiled-in or user-supplied.</summary>
+        Bypassed = 2,
+        ProxyReachable = 3,
+        /// <summary>No check has completed since the configuration was last applied.</summary>
+        ProxyNotChecked = 4,
+        ProxyUnreachable = 5
+    }
+
+    /// <summary>
     /// The single source of truth for routing decisions, shared by the proxy and the gate handler.
     /// </summary>
     /// <remarks>
@@ -78,15 +103,7 @@ namespace EmbyProxyRouter.Proxy
         /// </summary>
         public RouteDecision Decide(Uri destination)
         {
-            string reason;
-            return Decide(Settings, destination, out reason);
-        }
-
-        /// <summary>
-        /// Decides how a single destination should be routed, and explains why.
-        /// </summary>
-        public RouteDecision Decide(Uri destination, out string reason)
-        {
+            RouteReason reason;
             return Decide(Settings, destination, out reason);
         }
 
@@ -103,9 +120,11 @@ namespace EmbyProxyRouter.Proxy
         ///
         /// The reason is not decoration. A user running fail-open needs to be able to see in the log
         /// that a request went out directly because the proxy was down — the reference project's
-        /// habit of falling back silently is the specific behaviour this plugin rejects.
+        /// habit of falling back silently is the specific behaviour this plugin rejects. It is
+        /// handed back as a code and only turned into text by <see cref="Explain"/>, at the point
+        /// where a line is actually written.
         /// </remarks>
-        public RouteDecision Decide(ProxySettings settings, Uri destination, out string reason)
+        public RouteDecision Decide(ProxySettings settings, Uri destination, out RouteReason reason)
         {
             if (settings == null)
             {
@@ -114,7 +133,7 @@ namespace EmbyProxyRouter.Proxy
 
             if (!settings.Enabled)
             {
-                reason = Localizer.Get("ReasonDisabled");
+                reason = RouteReason.Disabled;
                 return RouteDecision.Direct;
             }
 
@@ -123,14 +142,13 @@ namespace EmbyProxyRouter.Proxy
                 // Enabled but misconfigured. Under fail-closed this is not a reason to quietly send
                 // everything in the clear — that is precisely the silent-fallback behaviour this
                 // plugin is meant to avoid.
-                reason = Localizer.Get("ReasonMisconfigured") +
-                         (settings.ConfigError != null ? ": " + settings.ConfigError : string.Empty);
+                reason = RouteReason.Misconfigured;
                 return settings.FailOpen ? RouteDecision.Direct : RouteDecision.Blocked;
             }
 
             if (settings.Bypass.IsBypassed(destination))
             {
-                reason = Localizer.Get("ReasonBypassed");
+                reason = RouteReason.Bypassed;
                 return RouteDecision.Direct;
             }
 
@@ -139,14 +157,49 @@ namespace EmbyProxyRouter.Proxy
             var health = Health;
             if (health == ProxyHealth.Reachable)
             {
-                reason = Localizer.Get("ReasonReachable");
+                reason = RouteReason.ProxyReachable;
                 return RouteDecision.ViaProxy;
             }
 
-            reason = Localizer.Get(health == ProxyHealth.Unknown
-                ? "ReasonNotChecked"
-                : "ReasonUnreachable");
+            reason = health == ProxyHealth.Unknown
+                ? RouteReason.ProxyNotChecked
+                : RouteReason.ProxyUnreachable;
             return settings.FailOpen ? RouteDecision.Direct : RouteDecision.Blocked;
+        }
+
+        /// <summary>
+        /// Renders a <see cref="RouteReason"/> in the dashboard language.
+        /// </summary>
+        /// <remarks>
+        /// Lives beside <see cref="Decide"/> rather than at the call site so that the verdict and its
+        /// explanation cannot drift apart — adding a reason without a message would not compile past
+        /// the switch below. <paramref name="settings"/> must be the same snapshot the verdict came
+        /// from, because <see cref="RouteReason.Misconfigured"/> quotes the parse error out of it.
+        /// </remarks>
+        public static string Explain(RouteReason reason, ProxySettings settings)
+        {
+            switch (reason)
+            {
+                case RouteReason.Disabled:
+                    return Localizer.Get("ReasonDisabled");
+
+                case RouteReason.Misconfigured:
+                    var detail = settings == null ? null : settings.ConfigError;
+                    return Localizer.Get("ReasonMisconfigured") +
+                           (detail != null ? ": " + detail : string.Empty);
+
+                case RouteReason.Bypassed:
+                    return Localizer.Get("ReasonBypassed");
+
+                case RouteReason.ProxyReachable:
+                    return Localizer.Get("ReasonReachable");
+
+                case RouteReason.ProxyNotChecked:
+                    return Localizer.Get("ReasonNotChecked");
+
+                default:
+                    return Localizer.Get("ReasonUnreachable");
+            }
         }
 
         /// <summary>

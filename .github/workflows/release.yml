@@ -30,6 +30,7 @@ concurrency:
 
 env:
   PROJECT: src/EmbyProxyRouter/EmbyProxyRouter.csproj
+  TESTS: tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 
 jobs:
   release:
@@ -111,6 +112,12 @@ jobs:
 
       - name: Verify the output is a single self-contained plugin DLL
         run: bash build/verify-single-dll.sh
+
+      # Repeated here for the same reason as everything above it: a tag can sit
+      # on any commit, including one that never went through a pull request. A
+      # release must not be able to ship something CI would have rejected.
+      - name: Test
+        run: dotnet test "$TESTS" -c Release --logger "console;verbosity=normal"
 
       # gh is preinstalled on GitHub-hosted runners, so publishing needs no
       # third-party action and no SHA pin of its own.
