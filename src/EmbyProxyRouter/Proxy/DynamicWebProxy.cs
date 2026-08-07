@@ -51,18 +51,25 @@ namespace EmbyProxyRouter.Proxy
 
         public Uri GetProxy(Uri destination)
         {
+            // One snapshot for both the verdict and the endpoint it refers to. Reading Settings
+            // again after Decide could straddle a configuration change and pair a ViaProxy verdict
+            // with an endpoint that is already null.
             var settings = _state.Settings;
 
-            switch (_state.Decide(destination))
+            RouteReason reason;
+            switch (_state.Decide(settings, destination, out reason))
             {
                 case RouteDecision.ViaProxy:
+                    // Decide only returns ViaProxy after establishing the endpoint is non-null.
                     return settings.Endpoint.Uri;
 
                 case RouteDecision.Blocked:
-                    // ProxyGateHandler normally rejects these before they ever reach the proxy
-                    // resolver. Returning the proxy URI anyway keeps the failure mode closed: if some
-                    // code path ever reaches here without passing the gate, the request tries an
-                    // unreachable proxy and fails, rather than silently going out in the clear.
+                    // An IWebProxy cannot block — that is what ProxyGateHandler exists for, and it
+                    // rejects these before they ever reach the proxy resolver. Naming the proxy here
+                    // anyway means a hypothetical caller that skipped the gate still fails against an
+                    // unreachable proxy instead of going out in the clear. Note the honest limit of
+                    // that: when the proxy is enabled but misconfigured there is no endpoint to name,
+                    // and null means "connect directly". Enforcement lives in the gate, not here.
                     return settings.Endpoint != null ? settings.Endpoint.Uri : null;
 
                 default:

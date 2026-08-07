@@ -19,8 +19,8 @@ documentation.
 
 1. Fork the repository and create a branch from `main`.
 2. Keep each PR focused on a single topic.
-3. Make sure it passes CI (`ci.yml` runs on every PR: actionlint, a Release build, and the two
-   verification scripts below).
+3. Make sure it passes CI (`ci.yml` runs on every PR: actionlint, a Release build, the two
+   verification scripts below, and the unit tests).
 4. Open a PR and describe what you changed and why.
 
 Before anything else, check the change against **"What this plugin explicitly does NOT do"** in the
@@ -34,11 +34,18 @@ a general-purpose plugin are out of scope by design, not by omission.
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
 ./build/verify-patch-target.sh                                   # needs ilspycmd
 ./build/verify-single-dll.sh
+dotnet test -c Release tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 ```
 
-There is no test project. **Compiling is not evidence that it works** — the plugin references four
-Emby API assemblies that rarely change, while the method it patches is internal to the server. If you
-touch routing, parsing, bypass matching or localization, exercise the behaviour for real.
+The tests cover the parts that are decidable without a server: address parsing, bypass matching, the
+routing verdict, the fail-closed gate, the log throttle. Add cases there when you change any of
+those — a bug in them is invisible to everything else on this list.
+
+**A green test run is not evidence that the plugin works**, and neither is compiling. The tests say
+nothing about whether the Harmony patch still applies, and the plugin references four Emby API
+assemblies that rarely change while the method it patches is internal to the server and has changed
+before. If you touch routing, parsing, bypass matching or localization, exercise the behaviour for
+real as well.
 
 `verify-patch-target.sh` is mandatory when changing `build/emby-version.txt`. A Harmony postfix whose
 signature no longer matches never applies: the plugin installs cleanly, reports no error, and

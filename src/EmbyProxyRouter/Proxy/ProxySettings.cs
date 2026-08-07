@@ -64,10 +64,17 @@ namespace EmbyProxyRouter.Proxy
             AddCheckUrl(urls, options.HealthCheckUrlHttp);
             AddCheckUrl(urls, options.HealthCheckUrlHttps);
 
+            // Clamped at both ends. Validate rejects an out-of-range value entered on the page, but
+            // the options file can be edited directly and is read back without going through it, so
+            // the bound the UI advertises has to be enforced here as well or it is only a label.
             var interval = options.HealthCheckIntervalSeconds;
-            if (interval < 10)
+            if (interval < PluginOptions.MinCheckIntervalSeconds)
             {
-                interval = 10;
+                interval = PluginOptions.MinCheckIntervalSeconds;
+            }
+            else if (interval > PluginOptions.MaxCheckIntervalSeconds)
+            {
+                interval = PluginOptions.MaxCheckIntervalSeconds;
             }
 
             var settings = new ProxySettings

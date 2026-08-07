@@ -40,8 +40,11 @@ in [ARCHITECTURE.md](ARCHITECTURE.md#building).
 
 ### Confirming the patch took effect
 
-The settings page shows a **Patch status** line at the top. If it says anything other than "Active",
-**no** traffic is being redirected, and the reason is stated right next to it. In the server log:
+The settings page shows a **Patch status** line at the top. "Active" is the state you want. "NOT
+active" means **no** traffic is being redirected, and the reason is stated right next to it. A third
+state, "Active, but …", means the patch is running while at least one HTTP handler could not be
+given the proxy — under fail-closed those requests are still blocked rather than leaking, but they
+are not being routed either, and a server restart usually clears it. In the server log:
 
 ```
 Harmony patch active on HttpMessageHandler ApplicationHost.CreateHttpClientHandler(HttpMessageHandlerOptions) (Emby.Server.Implementations 4.9.5.0).
@@ -62,7 +65,7 @@ Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as use
 | **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Private and link-local networks are compiled in and always bypassed — see below. |
 | **Check URL (HTTP)** | Tests whether the proxy forwards plain HTTP. Must answer 2xx; redirects are not followed and therefore fail. Empty = skip. |
 | **Check URL (HTTPS)** | Tests whether the proxy opens a CONNECT tunnel — the path almost all Emby traffic takes. Both checks must succeed. Both fields empty = TCP check only. |
-| **Check interval** | Seconds between reachability checks, minimum 10. |
+| **Check interval** | Seconds between reachability checks. Between 10 and 3600; values outside that range are clamped, including ones edited straight into the options file. |
 
 ### Fail-closed vs. fail-open
 
@@ -83,6 +86,18 @@ WARN  Fail-open active - request is going out DIRECTLY, without the proxy: https
 ```
 
 The active policy is shown as its own status line at the top of the settings page.
+
+**Repeated warnings are collapsed, never dropped.** A library scan against a dead proxy would
+otherwise write one identical line per lookup and bury the first one. Each destination and reason is
+logged immediately the first time, then at most once a minute, with the number of occurrences left
+out stated on the next line:
+
+```
+WARN  Proxy unreachable - request blocked: https://api.themoviedb.org (proxy is unreachable). Fail-closed is active. [+2417 identical in the last 60 s]
+```
+
+This affects the log only. Every blocked request is still blocked, and still fails with its own
+message.
 
 ### What is always bypassed
 
@@ -129,9 +144,13 @@ and rebuild. Pull requests with translations are welcome — see [CONTRIBUTING.m
   the plugin exists to avoid.
 * **HTTP(S) proxy authentication is reactive.** .NET sends credentials only after the proxy answers
   `407`, not pre-emptively. Proxies that reject outright without issuing a challenge will not work.
-* **"Ignore certificate validation" is broad.** The option disables TLS validation both for the
-  connection to the proxy *and* for the destination connections tunnelled through it. Only enable it
-  when the proxy uses a self-signed certificate.
+* **"Ignore certificate validation" is broad.** The option only takes effect while the proxy is
+  enabled and its address is valid — with the plugin switched off, Emby's TLS behaviour is left
+  exactly as it was found. But while it is in effect it covers *every* outbound connection the Emby
+  core makes: the proxy itself, the destinations tunnelled through it, and the destinations that go
+  out directly because they are on the bypass list — Emby's licensing hosts among them. A
+  certificate callback is handed the TLS handshake, not the request that triggered it, so the plugin
+  cannot narrow this any further. Only enable it when the proxy uses a self-signed certificate.
 * **Credentials are stored in plain text.** Emby persists plugin options as JSON under
   `/config/plugins/configurations/`. The password field is masked in the UI, not in the file.
 * **Bound to an internal Emby method.** The patched method is not public API, so an Emby update can

@@ -49,6 +49,15 @@ namespace EmbyProxyRouter.Localization
         public static string DescCheckUrlHttps => Localizer.Get(nameof(DescCheckUrlHttps));
 
         public static string LabelCheckInterval => Localizer.Get(nameof(LabelCheckInterval));
-        public static string DescCheckInterval => Localizer.Get(nameof(DescCheckInterval));
+
+        /// <summary>
+        /// The only description here that is formatted rather than looked up: it quotes the bounds,
+        /// and those come from <see cref="PluginOptions"/> so the page cannot advertise a range the
+        /// validation does not enforce. Both are compile-time constants, so this pulls in no type.
+        /// </summary>
+        public static string DescCheckInterval => Localizer.Format(
+            nameof(DescCheckInterval),
+            PluginOptions.MinCheckIntervalSeconds,
+            PluginOptions.MaxCheckIntervalSeconds);
     }
 }

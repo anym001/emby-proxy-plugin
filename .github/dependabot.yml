@@ -24,14 +24,32 @@ updates:
     commit-message:
       prefix: ci
 
-  # Lib.Harmony is the only NuGet dependency, and it is embedded into the plugin
-  # DLL rather than shipped next to it, so a bump changes the artifact itself
-  # rather than just a reference. It also patches the CLR at runtime, which is
-  # the part of this plugin with the least margin for a silent regression - the
-  # patch-target check is what has to pass before such a bump is taken.
+  # Lib.Harmony is the plugin's only NuGet dependency, and it is embedded into
+  # the plugin DLL rather than shipped next to it, so a bump changes the artifact
+  # itself rather than just a reference. It also patches the CLR at runtime,
+  # which is the part of this plugin with the least margin for a silent
+  # regression - the patch-target check is what has to pass before such a bump
+  # is taken.
   - package-ecosystem: nuget
     directory: "/src/EmbyProxyRouter"
     schedule:
       interval: monthly
     commit-message:
       prefix: build
+
+  # The test project's own dependencies - xunit and the VSTest host. Kept as a
+  # separate entry rather than folded into the one above because these ship in
+  # nothing: they are build-time only, they cannot affect the artifact, and a
+  # bump to them is verified by the tests passing rather than by the
+  # patch-target check. Grouped into one pull request for the same reason the
+  # actions are - they move together, and each one costs a full CI run.
+  - package-ecosystem: nuget
+    directory: "/tests/EmbyProxyRouter.Tests"
+    schedule:
+      interval: monthly
+    groups:
+      test-tooling:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: test

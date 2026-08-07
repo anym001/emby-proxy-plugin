@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unit tests for the parts of the plugin that are decidable without a server: address parsing,
+    bypass matching, the routing verdict, the fail-closed gate and the log throttle. All of them are
+    pure functions over their inputs, which is what makes them worth testing here.
+
+    What this project deliberately does NOT cover, because it cannot:
+      * The Harmony patch. Whether CreateHttpClientHandler still has the expected shape is a fact
+        about a shipped Emby build, not about this code - build/verify-patch-target.sh answers it by
+        decompiling the real assembly.
+      * Real proxy traffic. Whether a SOCKS5 server actually negotiates authentication has to be
+        exercised against a server; see the "Verifying behaviour" section of ARCHITECTURE.md.
+    A green run here means the logic is right, not that the plugin works. Both checks are needed.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>EmbyProxyRouter.Tests</AssemblyName>
+    <RootNamespace>EmbyProxyRouter.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Test assertions are the point here; an unused local in one is not worth failing a run. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EmbyProxyRouter\EmbyProxyRouter.csproj" />
+  </ItemGroup>
+
+  <!--
+    The plugin references these with Private=false - Emby supplies them at runtime, and shipping
+    them beside the plugin would be redistributing proprietary assemblies. A test host has no Emby
+    to supply them, so here they are copied into the test output instead. Run
+    build/fetch-emby-refs.sh first; lib/ is gitignored.
+  -->
+  <PropertyGroup>
+    <EmbyLibDir Condition="'$(EmbyLibDir)' == ''">$(MSBuildThisFileDirectory)..\..\lib</EmbyLibDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MediaBrowser.Common">
+      <HintPath>$(EmbyLibDir)\MediaBrowser.Common.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Controller">
+      <HintPath>$(EmbyLibDir)\MediaBrowser.Controller.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Model">
+      <HintPath>$(EmbyLibDir)\MediaBrowser.Model.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Emby.Web.GenericEdit">
+      <HintPath>$(EmbyLibDir)\Emby.Web.GenericEdit.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

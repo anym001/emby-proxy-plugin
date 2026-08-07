@@ -3,10 +3,14 @@ name: CI
 # Everything that answers "is this change sound?" - and nothing that produces a
 # deliverable. Releasing is release.yml's job, on a tag.
 #
-# There is no test project in this repository, so the checks below are what
-# stands in for one: the workflows are linted, the plugin is compiled against
-# the real Emby assemblies, the patched method is asserted to still exist with
-# the expected signature, and the output is asserted to still be one file.
+# The checks are deliberately of two kinds, because they answer different
+# questions. The unit tests decide whether the plugin's own logic is right -
+# address parsing, bypass matching, the routing verdict, the fail-closed gate.
+# The rest decide whether it still fits the server it plugs into: the workflows
+# are linted, the plugin is compiled against the real Emby assemblies, the
+# patched method is asserted to still exist with the expected signature, and the
+# output is asserted to still be one file. Neither kind substitutes for the
+# other - a green test run says nothing about whether the Harmony patch applies.
 on:
   # Note: GitHub only offers the "Run workflow" button for workflows that exist
   # on the default branch. release-check.yml dispatches this workflow by name.
@@ -29,6 +33,7 @@ concurrency:
 
 env:
   PROJECT: src/EmbyProxyRouter/EmbyProxyRouter.csproj
+  TESTS: tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 
 jobs:
   # Static check on the workflows themselves. Everything else here only reports
@@ -67,11 +72,19 @@ jobs:
       # running against that merge - testing the merge result is the point of a
       # pull-request run - but anything labelled with a commit uses the one that
       # was actually pushed, so it can be traced back to one.
+      # Values reach the shell through the environment, never through `${{ }}`
+      # inside the script. An expression is expanded into the script text before
+      # bash ever sees it, so a crafted input would be run as script rather than
+      # read as data - and this job is reachable from a dispatch whose version
+      # comes from release-check.yml, i.e. from a tag name upstream of us.
       - name: Resolve the build inputs
         id: ctx
+        env:
+          REQUESTED_VERSION: ${{ inputs.emby-version }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          version="${{ inputs.emby-version }}"
+          version="$REQUESTED_VERSION"
           if [ -z "$version" ]; then
             version="$(tr -d '[:space:]' < build/emby-version.txt)"
             echo "No version requested - using the pinned $version"
@@ -79,7 +92,7 @@ jobs:
             echo "Building against the requested $version"
           fi
 
-          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          sha="$HEAD_SHA"
           echo "Commit under test: $sha"
 
           {
@@ -114,7 +127,9 @@ jobs:
           key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
 
       - name: Fetch Emby assemblies
-        run: bash build/fetch-emby-refs.sh "${{ steps.ctx.outputs.version }}"
+        env:
+          EMBY_VERSION: ${{ steps.ctx.outputs.version }}
+        run: bash build/fetch-emby-refs.sh "$EMBY_VERSION"
 
       # The check that actually matters when moving to a new Emby version.
       # Compiling proves little on its own: the four referenced API assemblies
@@ -142,6 +157,13 @@ jobs:
 
       - name: Verify the output is a single self-contained plugin DLL
         run: bash build/verify-single-dll.sh
+
+      # After the single-DLL assertion, not before: the test project copies the
+      # Emby assemblies into its own output (a test host has no server to supply
+      # them), and running it first would make it harder to tell an accidental
+      # change in the plugin's own output shape from that.
+      - name: Test
+        run: dotnet test "$TESTS" -c Release --logger "console;verbosity=normal"
 
       # Pull requests verify; they do not publish. A manual run is different: it
       # is how a candidate against a *new* Emby version gets built, and having

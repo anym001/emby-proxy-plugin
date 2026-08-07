@@ -24,7 +24,7 @@
   "LabelPassword": "Passwort",
 
   "LabelIgnoreCert": "Zertifikatsprüfung ignorieren",
-  "DescIgnoreCert": "Nötig für HTTPS-Proxies mit selbstsigniertem Zertifikat. Betrifft sowohl die Verbindung zum Proxy als auch die darüber getunnelten Zielverbindungen.",
+  "DescIgnoreCert": "Nötig für HTTPS-Proxies mit selbstsigniertem Zertifikat. Wirkt nur, solange der Proxy aktiviert und konfiguriert ist – dann aber für jede ausgehende Verbindung des Emby-Kerns: den Proxy selbst, die darüber getunnelten Ziele und die Ziele, die wegen der Bypass-Liste direkt hinausgehen.",
 
   "LabelFailOpen": "Bei Proxy-Ausfall trotzdem direkt verbinden",
   "DescFailOpen": "AUS (Standard, Fail-Closed): Ist der Proxy nicht erreichbar, werden betroffene Requests abgebrochen und protokolliert. EIN (Fail-Open): Requests gehen ohne Proxy direkt ins Internet – jeder solche Fall wird als Warnung geloggt.",
@@ -39,10 +39,11 @@
   "DescCheckUrlHttps": "Prüft, ob der Proxy einen CONNECT-Tunnel öffnet – über diesen Weg läuft nahezu der gesamte Emby-Traffic. Ein Proxy kann HTTP weiterleiten und CONNECT trotzdem verweigern; deshalb wird beides geprüft und beides muss erfolgreich sein. Beide Felder leer lassen, um nur die TCP-Verbindung zu prüfen.",
 
   "LabelCheckInterval": "Prüfintervall (Sekunden)",
-  "DescCheckInterval": "Mindestens 10 Sekunden.",
+  "DescCheckInterval": "Zwischen {0} und {1} Sekunden.",
 
   "PatchCaption": "Patch",
   "PatchActive": "Aktiv – Traffic des Emby-Kerns läuft über dieses Plugin.",
+  "PatchDegraded": "Aktiv, aber der Proxy konnte mindestens einem HTTP-Handler nicht zugewiesen werden: {0} Diese Anfragen werden unter Fail-closed weiterhin blockiert, laufen aber nicht über den Proxy. Ein Neustart des Servers behebt das in der Regel.",
   "PatchInactive": "NICHT aktiv – {0} Es wird kein Traffic umgeleitet.",
   "UnknownError": "unbekannter Fehler",
 
@@ -84,6 +85,7 @@
 
   "BlockedMessage": "Proxy nicht erreichbar – Request blockiert: {0} ({1}). Fail-Closed ist aktiv.",
   "FailOpenMessage": "Fail-Open aktiv – Request geht DIREKT raus, ohne Proxy: {0} ({1})",
+  "SuppressedSuffix": " [+{0} gleichartige in den letzten {1} s]",
 
   "AuthNone": "ohne Auth",
   "AuthAs": "Auth als {0}",
@@ -94,6 +96,7 @@
   "ErrNeedPort": "Proxy-Adresse braucht einen Port, z. B. 192.168.1.10:8080 oder socks5://192.168.1.10:1080",
   "ErrPortNotNumber": "Proxy-Port ist keine Zahl: {0}",
   "ErrNoHost": "Proxy-Adresse enthält keinen Host.",
+  "ErrInvalidHost": "Proxy-Adresse enthält einen ungültigen Host: {0}",
   "ErrNeedExplicitPort": "Proxy-Adresse braucht einen expliziten Port.",
   "ErrPortRange": "Proxy-Port liegt außerhalb von 1-65535: {0}",
   "ErrInvalidWildcard": "Ungültiger Wildcard-Eintrag: {0}",
@@ -101,6 +104,7 @@
   "ErrInvalidIp": "Ungültige IP-Adresse in: {0}",
   "ErrInvalidPrefix": "Ungültige Präfixlänge in: {0}",
   "ErrPrefixFamily": "Präfixlänge passt nicht zur Adressfamilie: {0}",
-  "ErrIntervalMin": "Das Prüfintervall muss mindestens 10 Sekunden betragen.",
+  "ErrIntervalMin": "Das Prüfintervall muss mindestens {0} Sekunden betragen.",
+  "ErrIntervalMax": "Das Prüfintervall darf höchstens {0} Sekunden betragen.",
   "ErrCheckUrlScheme": "Diese URL muss mit {0} beginnen"
 }

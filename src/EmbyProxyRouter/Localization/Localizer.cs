@@ -43,12 +43,6 @@ namespace EmbyProxyRouter.Localization
         private static readonly ConcurrentDictionary<string, string> ResolvedCodes =
             new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Language codes for which a JSON file is embedded in this assembly.</summary>
-        public static IReadOnlyList<string> AvailableCodes
-        {
-            get { return Codes.Value; }
-        }
-
         /// <summary>
         /// The language code currently in effect, derived from Emby's display language.
         /// </summary>

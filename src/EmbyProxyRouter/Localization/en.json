@@ -24,7 +24,7 @@
   "LabelPassword": "Password",
 
   "LabelIgnoreCert": "Ignore certificate validation",
-  "DescIgnoreCert": "Required for HTTPS proxies using a self-signed certificate. Affects both the connection to the proxy and the destination connections tunnelled through it.",
+  "DescIgnoreCert": "Required for HTTPS proxies using a self-signed certificate. Only takes effect while the proxy is enabled and configured, but then it applies to every outbound connection the Emby core makes - the proxy itself, the destinations tunnelled through it, and the destinations that go out directly because they are on the bypass list.",
 
   "LabelFailOpen": "Connect directly when the proxy is unavailable",
   "DescFailOpen": "OFF (default, fail-closed): if the proxy is unreachable, affected requests are aborted and logged. ON (fail-open): requests go straight out to the internet without the proxy - every such case is logged as a warning.",
@@ -39,10 +39,11 @@
   "DescCheckUrlHttps": "Tests whether the proxy opens a CONNECT tunnel - this is the path almost all of Emby's traffic takes. A proxy can forward HTTP and still refuse CONNECT, which is why both are checked and both must succeed. Leave both fields empty to check TCP connectivity only.",
 
   "LabelCheckInterval": "Check interval (seconds)",
-  "DescCheckInterval": "Minimum 10 seconds.",
+  "DescCheckInterval": "Between {0} and {1} seconds.",
 
   "PatchCaption": "Patch",
   "PatchActive": "Active - Emby core traffic passes through this plugin.",
+  "PatchDegraded": "Active, but the proxy could not be attached to at least one HTTP handler: {0} Those requests are still blocked under fail-closed, but they do not go through the proxy. Restarting the server usually clears this.",
   "PatchInactive": "NOT active - {0} No traffic is being redirected.",
   "UnknownError": "unknown error",
 
@@ -84,6 +85,7 @@
 
   "BlockedMessage": "Proxy unreachable - request blocked: {0} ({1}). Fail-closed is active.",
   "FailOpenMessage": "Fail-open active - request is going out DIRECTLY, without the proxy: {0} ({1})",
+  "SuppressedSuffix": " [+{0} identical in the last {1} s]",
 
   "AuthNone": "no auth",
   "AuthAs": "auth as {0}",
@@ -94,6 +96,7 @@
   "ErrNeedPort": "Proxy address needs a port, for example 192.168.1.10:8080 or socks5://192.168.1.10:1080",
   "ErrPortNotNumber": "Proxy port is not a number: {0}",
   "ErrNoHost": "Proxy address contains no host.",
+  "ErrInvalidHost": "Proxy address contains an invalid host: {0}",
   "ErrNeedExplicitPort": "Proxy address needs an explicit port.",
   "ErrPortRange": "Proxy port is outside 1-65535: {0}",
   "ErrInvalidWildcard": "Invalid wildcard entry: {0}",
@@ -101,6 +104,7 @@
   "ErrInvalidIp": "Invalid IP address in: {0}",
   "ErrInvalidPrefix": "Invalid prefix length in: {0}",
   "ErrPrefixFamily": "Prefix length does not match the address family: {0}",
-  "ErrIntervalMin": "The check interval must be at least 10 seconds.",
+  "ErrIntervalMin": "The check interval must be at least {0} seconds.",
+  "ErrIntervalMax": "The check interval must not exceed {0} seconds.",
   "ErrCheckUrlScheme": "This URL has to start with {0}"
 }
