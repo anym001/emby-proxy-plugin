@@ -13,8 +13,7 @@ Everything goes through it; what does not is something you configure.
 * Checks the proxy when you open or save the settings page, and shows the result there. The check
   talks to the proxy and to nothing else.
 * **No fallback to a direct connection.** A configured proxy is used; if it cannot be reached, the
-  request fails. That is how curl, a browser and every other program handed a proxy address behave,
-  and it is what makes the routing safe without the plugin having to track whether the proxy is up.
+  request fails.
 * Routes everything through the proxy by default, with a switch to keep RFC1918 and link-local
   traffic off it. Loopback is never proxied.
 
@@ -78,25 +77,17 @@ is not what you want, switch the setting on after upgrading. Loopback is unaffec
 ### What happens when the proxy is down
 
 Requests that would have used it fail. There is no fallback to a direct connection, and no setting
-to enable one — the same behaviour `curl`, a browser or any other program gets when it is handed a
-proxy address that stops answering. Nothing slips past the proxy unnoticed because nothing is ever
-routed around it.
+to enable one. Metadata lookups will fail for as long as the proxy is gone.
 
-Metadata lookups will therefore fail for as long as the proxy is gone. That is the price, and it is
-the point.
-
-One case is different, because it is the one .NET cannot express: the proxy is switched **on** and
-its address does not parse. There is no proxy to connect to and no failure to inherit, so the plugin
-refuses the request itself and says why:
+One case is different: the proxy is switched **on** and its address does not parse. The plugin
+refuses those requests itself and says why:
 
 ```
 ERROR Request blocked, no usable proxy: https://api.themoviedb.org (proxy is enabled but misconfigured: Proxy address needs an explicit port.)
 ```
 
-**Repeated messages are collapsed, never dropped.** A library scan against a misconfigured proxy
-would otherwise write one identical line per lookup and bury the first one. Each destination is
-logged immediately the first time, then at most once a minute, with the number left out stated on
-the next line:
+**Repeated messages are collapsed, never dropped.** Each destination is logged immediately the first
+time, then at most once a minute, with the number left out stated on the next line:
 
 ```
 ERROR Request blocked, no usable proxy: https://api.themoviedb.org (...) [+2417 identical in the last 60 s]
@@ -116,10 +107,9 @@ proxy accepts you without the credentials you supplied, which otherwise leaves a
 looks authenticated and is not. For an HTTPS proxy it completes the TLS handshake. For a plain HTTP
 proxy it establishes that something accepts connections on that port, and claims no more.
 
-It deliberately stops before the point where the proxy would connect somewhere on your behalf. That
-is why there is no check URL to configure: fetching one would show a third party the proxy's egress
-address every time, and make the verdict depend on that party's uptime. The trade-off is stated
-under Known limitations — this check cannot prove the proxy actually forwards traffic.
+There is no check URL to configure: the check stops before the point where the proxy would connect
+somewhere on your behalf. It therefore cannot prove the proxy forwards traffic — see Known
+limitations.
 
 ### What bypasses the proxy
 
@@ -129,10 +119,7 @@ under Known limitations — this check cannot prove the proxy actually forwards 
 127.0.0.0/8   ::1   localhost
 ```
 
-A proxy somewhere else has no route back to this machine, so a request to the server's own loopback
-address sent through it cannot succeed however the plugin is configured. Making that switchable
-would only offer a setting whose "on" position is always wrong. .NET's own `WebProxy` agrees —
-it bypasses a loopback host before it consults its bypass settings at all.
+A proxy elsewhere has no route back to this machine, so these cannot succeed through one.
 
 **Bypassed only when "Bypass proxy for private networks" is switched on — it is off by default:**
 
@@ -147,9 +134,9 @@ Switch it on when the server also talks to its own LAN — another Emby server, 
 local metadata cache — and you do not want that traffic crossing a remote proxy, or dying with it.
 Left off, an unreachable proxy costs you those alongside the internet.
 
-**Everything matched by name rather than by address range goes in the bypass list**, and that is
-more than it sounds. Matching is **literal, with no DNS resolution** (see Known limitations), so a
-LAN device addressed by a name is covered by none of the above — it is a name, not an IP:
+**Everything matched by name rather than by address range goes in the bypass list.** Matching is
+**literal, with no DNS resolution** (see Known limitations), so a LAN device addressed by a name is
+covered by none of the above — it is a name, not an IP:
 
 * dotted names pointing at a LAN address — `emby.lan`, `nas.home.arpa`, `nas.fritz.box`, or your own
   domain on a 192.168 address
@@ -160,10 +147,7 @@ LAN device addressed by a name is covered by none of the above — it is a name,
 The list is *additional* — it starts empty, and it keeps working when the switch is off.
 
 **Emby's own licensing and Connect hosts are not bypassed.** `mb3admin.com` and
-`connect.emby.media` go through the proxy like every other destination. Bypassing them would leave a
-server whose only route outward *is* the proxy unable to reach them at all, and it would buy little
-privacy in exchange: a licence check carries the key identifying the installation either way. The
-cost of routing them is stated under Known limitations.
+`connect.emby.media` go through the proxy like every other destination — see Known limitations.
 
 Log messages deliberately contain only scheme, host and port — never the path. Paths and query
 strings of metadata lookups carry title information and frequently API keys.
@@ -175,10 +159,7 @@ in the plugin**, and a change takes effect without a restart. Translations are e
 there are no loose files to deploy. A language the plugin does not ship shows English, and an
 incomplete translation falls back to English per string rather than showing blank labels.
 
-**The server log stays English regardless.** Only the dashboard is translated. A log line is usually
-read by whoever is debugging the server rather than by whoever picked the language, and often away
-from the machine — in an issue, or searched for a phrase from this README — so translating it would
-only make it harder to search and harder to pass on.
+**The server log stays English regardless.** Only the dashboard is translated.
 
 Adding a language is a single file: copy `src/EmbyProxyRouter/Localization/en.json` to `<code>.json`
 using the code Emby uses (`fr`, `zh-CN`, `pt-BR`, …), translate the values, leave the keys untouched
