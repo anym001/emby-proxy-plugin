@@ -3,7 +3,7 @@
   "_languageName": "English",
 
   "EditorTitle": "Proxy Router",
-  "EditorDescription": "Routes outbound HTTP(S) traffic initiated by the Emby core (metadata providers, remote images, subtitle downloads) through a proxy. Private networks are contacted directly unless you switch that off.",
+  "EditorDescription": "Routes outbound HTTP(S) traffic initiated by the Emby core (metadata providers, remote images, subtitle downloads) through a proxy. Everything goes through it unless you bypass private networks or list exceptions below.",
 
   "LabelProxyStatus": "Proxy status",
   "LabelPatchStatus": "Patch status",
@@ -26,7 +26,7 @@
   "DescIgnoreCert": "Required for HTTPS proxies using a self-signed certificate. Only takes effect while the proxy is enabled and configured, but then it applies to every outbound connection the Emby core makes - the proxy itself, the destinations tunnelled through it, and the destinations that go out directly because they are on the bypass list.",
 
   "LabelBypassPrivate": "Bypass proxy for private networks",
-  "DescBypassPrivate": "ON (default): private networks (10.x, 172.16-31.x, 192.168.x), link-local, IPv6 ULA and *.local are contacted directly. OFF: they go through the proxy too, so an unreachable proxy also cuts the server off from its own LAN. Only switch this off if the proxy is genuinely the machine's only route outward. The server's own loopback address is never proxied either way.",
+  "DescBypassPrivate": "OFF (default): everything goes through the proxy, including private networks. ON: private networks (10.x, 172.16-31.x, 192.168.x), link-local, IPv6 ULA and *.local are contacted directly instead. Switch this on if the server also talks to its own LAN - other Emby servers, DLNA endpoints, a local metadata cache - and you do not want that traffic crossing the proxy or dying with it. The server's own loopback address is never proxied either way.",
 
   "LabelBypassList": "Bypass list",
   "DescBypassList": "Additional entries, one per line. Accepts CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution is performed - hostnames are matched literally. Entries here are additional to whatever the switch above covers, and they apply even when it is off. Emby's licensing servers are not bypassed by default - add them here if you want them contacted directly.",

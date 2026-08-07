@@ -15,8 +15,8 @@ while always contacting private networks directly.
 * **No fallback to a direct connection.** A configured proxy is used; if it cannot be reached, the
   request fails. That is how curl, a browser and every other program handed a proxy address behave,
   and it is what makes the routing safe without the plugin having to track whether the proxy is up.
-* Routes RFC1918 and link-local directly by default, with a switch to send those through the proxy
-  too. Loopback is never proxied.
+* Routes everything through the proxy by default, with a switch to keep RFC1918 and link-local
+  traffic off it. Loopback is never proxied.
 
 ## What this plugin explicitly does NOT do
 
@@ -53,6 +53,16 @@ Harmony patch active on HttpMessageHandler ApplicationHost.CreateHttpClientHandl
 Proxy Router: enabled - socks5://192.168.1.10:1080 (auth as user) | private networks bypassed
 ```
 
+## Upgrading from a version before the private-networks switch
+
+Earlier builds always bypassed RFC1918, link-local and `*.local`. That is now the
+**"Bypass proxy for private networks"** setting, and it is **off** by default.
+
+An options file written before the setting existed carries no such field, so it lands on the
+default: those servers start sending LAN traffic through the proxy, and lose their own network
+whenever the proxy is down — another Emby server, a DLNA endpoint, a local metadata cache. If that
+is not what you want, switch the setting on after upgrading. Loopback is unaffected either way.
+
 ## Configuration
 
 | Field | Meaning |
@@ -62,7 +72,7 @@ Proxy Router: enabled - socks5://192.168.1.10:1080 (auth as user) | private netw
 | **Proxy address** | `host:port` (e.g. `192.168.1.10:8080`) or a full URL (e.g. `socks5://192.168.1.10:1080`). A port is mandatory. |
 | **Username / Password** | Optional. Take precedence over credentials embedded in the URL. Credentials *in* the address need the URL form (`http://user:password@host:port`); in the bare `host:port` form there is no scheme to attach them to and the address is rejected. |
 | **Ignore certificate validation** | For HTTPS proxies using a self-signed certificate. |
-| **Bypass proxy for private networks** | On (default) = RFC1918, link-local, ULA and `*.local` go directly. Off = they go through the proxy too, so a dead proxy also cuts the server off from its own LAN. Loopback is unaffected either way. |
+| **Bypass proxy for private networks** | Off (default) = everything goes through the proxy, private networks included, so a dead proxy also cuts the server off from its own LAN. On = RFC1918, link-local, ULA and `*.local` go directly instead. Loopback is unaffected either way. |
 | **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Applies on top of the switch above, and still applies when it is off. |
 
 ### What happens when the proxy is down
@@ -124,7 +134,7 @@ address sent through it cannot succeed however the plugin is configured. Making 
 would only offer a setting whose "on" position is always wrong. .NET's own `WebProxy` agrees —
 it bypasses a loopback host before it consults its bypass settings at all.
 
-**Bypassed by default, controlled by "Bypass proxy for private networks":**
+**Bypassed only when "Bypass proxy for private networks" is switched on — it is off by default:**
 
 ```
 10.0.0.0/8   172.16.0.0/12   192.168.0.0/16   169.254.0.0/16
@@ -133,10 +143,9 @@ fc00::/7     fe80::/10       *.local
 
 A trailing dot is ignored throughout, so `emby.local.` is `emby.local`.
 
-Sending LAN traffic through a remote proxy is rarely the intent, and an unreachable proxy would
-otherwise cut the server off from its own network — which is why this is on by default.
-Switch it off when the proxy genuinely is the machine's only route outward and you want everything,
-without exception, to take it.
+Switch it on when the server also talks to its own LAN — another Emby server, a DLNA endpoint, a
+local metadata cache — and you do not want that traffic crossing a remote proxy, or dying with it.
+Left off, an unreachable proxy costs you those alongside the internet.
 
 **Everything matched by name rather than by address range goes in the bypass list**, and that is
 more than it sounds. Matching is **literal, with no DNS resolution** (see Known limitations), so a

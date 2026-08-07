@@ -21,8 +21,8 @@ namespace EmbyProxyRouter.Tests
         // --- The compiled-in entries -----------------------------------------------------------
 
         /// <summary>
-        /// These hold with an empty list, which is the point: the README promises them and a
-        /// promise left to an editable default is a suggestion.
+        /// With the private-networks switch on, which is not the default but is what most of these
+        /// tests exercise — the compiled-in ranges are only interesting when they are in play.
         /// </summary>
         [Theory]
         [InlineData("http://10.1.2.3/")]
@@ -36,7 +36,7 @@ namespace EmbyProxyRouter.Tests
         [InlineData("http://[fe80::1]/")]
         [InlineData("http://localhost/")]
         [InlineData("http://anything.local/")]
-        public void PrivateDestinationsAreAlwaysBypassed(string url)
+        public void PrivateDestinationsAreBypassedWhenTheSwitchIsOn(string url)
         {
             Assert.True(IsBypassed(null, url));
         }
@@ -138,13 +138,13 @@ namespace EmbyProxyRouter.Tests
         // --- The private-networks switch ---------------------------------------------------------
 
         /// <summary>
-        /// Switched off, the private ranges go through the proxy like anything else.
+        /// The switch is what decides these, in both directions.
         /// </summary>
         /// <remarks>
-        /// The option exists for a host whose only route outward is a tunnel, where "everything,
-        /// without exception" is the whole point and there is no direct path for this traffic to
-        /// take anyway. The cost is real and documented: an unreachable proxy then takes the
-        /// server's own LAN with it.
+        /// Off is the default — everything goes through the proxy, which is the answer that needs no
+        /// qualification for a plugin whose job is to route outbound traffic. On is for a server that
+        /// also talks to its own LAN and does not want that traffic crossing a remote proxy, or
+        /// dying with it.
         /// </remarks>
         [Theory]
         [InlineData("http://10.1.2.3/")]
@@ -157,8 +157,8 @@ namespace EmbyProxyRouter.Tests
         [InlineData("http://[::ffff:10.0.0.1]/")]
         public void SwitchingOffPrivateNetworksSendsThemThroughTheProxy(string url)
         {
-            Assert.True(IsBypassed(null, url));                    // default
-            Assert.False(IsBypassedWithoutPrivate(null, url));     // switched off
+            Assert.True(IsBypassed(null, url));                    // switched on
+            Assert.False(IsBypassedWithoutPrivate(null, url));     // off, the default
         }
 
         /// <summary>

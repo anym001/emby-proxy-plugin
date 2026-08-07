@@ -8,15 +8,21 @@ namespace EmbyProxyRouter.Tests
         // --- The private-networks switch ----------------------------------------------------------
 
         /// <summary>
-        /// The switch defaults to on, so an options file written before it existed keeps the
-        /// behaviour it had.
+        /// The switch defaults to off: everything goes through the proxy unless asked otherwise.
         /// </summary>
+        /// <remarks>
+        /// This is also the migration behaviour, and worth pinning for that reason. An options file
+        /// written before the switch existed carries no such field, so deserialization leaves the
+        /// property at its default — meaning those servers start sending LAN traffic through the
+        /// proxy on upgrade. README.md says so under Upgrading; if this test is ever flipped, that
+        /// note has to move with it.
+        /// </remarks>
         [Fact]
-        public void PrivateNetworksAreBypassedByDefault()
+        public void PrivateNetworksAreProxiedByDefault()
         {
-            Assert.True(new PluginOptions().BypassPrivateNetworks);
-            Assert.True(ProxySettings.Disabled().Bypass.BypassPrivateNetworks);
-            Assert.True(ProxySettings.FromOptions(null).Bypass.BypassPrivateNetworks);
+            Assert.False(new PluginOptions().BypassPrivateNetworks);
+            Assert.False(ProxySettings.Disabled().Bypass.BypassPrivateNetworks);
+            Assert.False(ProxySettings.FromOptions(null).Bypass.BypassPrivateNetworks);
         }
 
         [Theory]
@@ -74,16 +80,19 @@ namespace EmbyProxyRouter.Tests
         }
 
         /// <summary>
-        /// The disabled snapshot still carries the compiled-in bypass rules, so a caller that reads
-        /// it before any configuration lands cannot conclude that nothing is bypassed.
+        /// The disabled snapshot still carries the unconditional rules, so a caller reading it
+        /// before any configuration lands cannot conclude that nothing at all is bypassed.
         /// </summary>
         [Fact]
-        public void TheDisabledSnapshotStillCarriesTheBypassRules()
+        public void TheDisabledSnapshotStillCarriesTheUnconditionalRules()
         {
             var settings = ProxySettings.Disabled();
 
             Assert.False(settings.Enabled);
-            Assert.True(settings.Bypass.IsBypassed(new System.Uri("http://192.168.1.1/")));
+            Assert.True(settings.Bypass.IsBypassed(new System.Uri("http://127.0.0.1/")));
+
+            // And not the switchable ones, matching the option's default.
+            Assert.False(settings.Bypass.IsBypassed(new System.Uri("http://192.168.1.1/")));
         }
 
         [Fact]

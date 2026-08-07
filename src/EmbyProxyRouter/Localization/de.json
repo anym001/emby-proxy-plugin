@@ -3,7 +3,7 @@
   "_languageName": "Deutsch",
 
   "EditorTitle": "Proxy Router",
-  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Private Netze werden direkt angesprochen, sofern man das nicht abschaltet.",
+  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Alles läuft darüber, sofern private Netze nicht umgangen oder unten Ausnahmen eingetragen werden.",
 
   "LabelProxyStatus": "Proxy-Status",
   "LabelPatchStatus": "Patch-Status",
@@ -26,7 +26,7 @@
   "DescIgnoreCert": "Nötig für HTTPS-Proxies mit selbstsigniertem Zertifikat. Wirkt nur, solange der Proxy aktiviert und konfiguriert ist – dann aber für jede ausgehende Verbindung des Emby-Kerns: den Proxy selbst, die darüber getunnelten Ziele und die Ziele, die wegen der Bypass-Liste direkt hinausgehen.",
 
   "LabelBypassPrivate": "Private Netze am Proxy vorbeileiten",
-  "DescBypassPrivate": "EIN (Standard): private Netze (10.x, 172.16-31.x, 192.168.x), Link-Local, IPv6-ULA und *.local werden direkt angesprochen. AUS: sie laufen ebenfalls über den Proxy – ein nicht erreichbarer Proxy schneidet den Server damit auch vom eigenen LAN ab. Nur ausschalten, wenn der Proxy wirklich der einzige Weg nach außen ist. Die eigene Loopback-Adresse läuft in keinem Fall über den Proxy.",
+  "DescBypassPrivate": "AUS (Standard): alles läuft über den Proxy, private Netze eingeschlossen. EIN: private Netze (10.x, 172.16-31.x, 192.168.x), Link-Local, IPv6-ULA und *.local werden stattdessen direkt angesprochen. Einschalten, wenn der Server auch mit dem eigenen LAN spricht – andere Emby-Server, DLNA-Endpunkte, ein lokaler Metadaten-Cache – und dieser Verkehr weder über den Proxy laufen noch mit ihm ausfallen soll. Die eigene Loopback-Adresse läuft in keinem Fall über den Proxy.",
 
   "LabelBypassList": "Bypass-Liste",
   "DescBypassList": "Zusätzliche Einträge, einer pro Zeile. Erlaubt: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Es findet keine DNS-Auflösung statt – Hostnamen werden literal verglichen. Einträge hier kommen zu dem hinzu, was der Schalter darüber abdeckt, und gelten auch dann, wenn er aus ist. Embys Lizenzserver werden standardmäßig nicht umgangen – trage sie hier ein, wenn sie direkt angesprochen werden sollen.",

@@ -68,15 +68,18 @@ namespace EmbyProxyRouter
         /// Whether RFC1918, link-local, ULA and <c>*.local</c> skip the proxy.
         /// </summary>
         /// <remarks>
-        /// On by default, and switching it off is the consequential direction: with it off, an
-        /// unreachable proxy takes the server's own LAN with it — other Emby
-        /// servers, DLNA endpoints, a local metadata cache. It exists because "everything, without
-        /// exception, through the proxy" is a legitimate thing to want on a host whose only route
-        /// outward is a tunnel. Loopback is never affected; see <see cref="BypassRules.Always"/>.
+        /// Off by default: everything, without exception, goes through the proxy, which is the
+        /// answer that needs no qualification for a plugin whose job is to route outbound traffic.
+        /// Switching it on is for a server that also talks to its own LAN — other Emby servers,
+        /// DLNA endpoints, a local metadata cache — and does not want that traffic crossing a
+        /// remote proxy, or dying with it.
+        ///
+        /// Note what the default costs: an unreachable proxy takes the LAN with it. Loopback is
+        /// never affected either way; see <see cref="BypassRules.Always"/>.
         /// </remarks>
         [DisplayNameL(nameof(Strings.LabelBypassPrivate), typeof(Strings))]
         [DescriptionL(nameof(Strings.DescBypassPrivate), typeof(Strings))]
-        public bool BypassPrivateNetworks { get; set; } = true;
+        public bool BypassPrivateNetworks { get; set; }
 
         [DisplayNameL(nameof(Strings.LabelBypassList), typeof(Strings))]
         [DescriptionL(nameof(Strings.DescBypassList), typeof(Strings))]

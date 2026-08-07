@@ -48,15 +48,14 @@ namespace EmbyProxyRouter.Proxy
         /// Merged on top of <see cref="Always"/> unless the user switches the bypass off.
         /// </summary>
         /// <remarks>
-        /// RFC1918, carrier-grade link-local, IPv6 ULA and mDNS. Bypassed by default because the
-        /// alternative bites hard: with the text box empty, LAN traffic (other Emby servers, DLNA
-        /// endpoints, a local metadata cache) went out through a remote proxy, and the server lost
-        /// its own network whenever that proxy was down.
+        /// RFC1918, carrier-grade link-local, IPv6 ULA and mDNS. Merged only when the user asks for
+        /// it: the default is that everything goes through the proxy, which is the answer that needs
+        /// no qualification for a plugin whose job is to route outbound traffic.
         ///
-        /// Switchable rather than fixed because "everything, without exception, goes through the
-        /// proxy" is a legitimate thing to want — a server whose only route outward is a VPN or
-        /// SOCKS tunnel has no direct path for this traffic to take anyway. Switching it off is a
-        /// deliberate choice with a stated cost, not a default anybody arrives at by accident.
+        /// Switching it on is for a server that also talks to its own LAN — other Emby servers,
+        /// DLNA endpoints, a local metadata cache — and does not want that traffic crossing a
+        /// remote proxy, or dying with it. That is a real configuration, which is why the switch
+        /// exists rather than the ranges being fixed one way or the other.
         ///
         /// Address ranges and mDNS, and nothing beyond that. Anything matched on the shape of a
         /// name — a dotless host, a guessed-at internal suffix — belongs in the user's bypass list,

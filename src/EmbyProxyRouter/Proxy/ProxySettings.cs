@@ -33,7 +33,11 @@ namespace EmbyProxyRouter.Proxy
             return new ProxySettings
             {
                 Enabled = false,
-                Bypass = BypassRules.Parse(null, true)
+
+                // Matches the option's default so there is one answer to "what does an
+                // unconfigured plugin bypass". Academic either way: Enabled is false, so Decide
+                // returns Direct for every destination without consulting these rules at all.
+                Bypass = BypassRules.Parse(null, false)
             };
         }
 

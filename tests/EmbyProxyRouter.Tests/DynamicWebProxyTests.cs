@@ -14,9 +14,13 @@ namespace EmbyProxyRouter.Tests
         private static readonly Uri Public = new Uri("https://api.themoviedb.org/3/movie/1");
         private static readonly Uri Lan = new Uri("http://192.168.1.50:8096/");
 
+        /// <param name="bypassPrivate">
+        /// Opted into explicitly rather than left at its default, because these tests are about what
+        /// the resolver does with a bypassed destination and the default is not to bypass one.
+        /// </param>
         private static ProxyState StateWith(
             bool enabled = true, string address = "socks5://proxy.example.com:1080",
-            string username = null, string password = null)
+            string username = null, string password = null, bool bypassPrivate = true)
         {
             var state = new ProxyState();
             state.Apply(ProxySettings.FromOptions(new PluginOptions
@@ -24,7 +28,8 @@ namespace EmbyProxyRouter.Tests
                 EnableProxy = enabled,
                 ProxyAddress = address,
                 Username = username ?? string.Empty,
-                Password = password ?? string.Empty
+                Password = password ?? string.Empty,
+                BypassPrivateNetworks = bypassPrivate
             }));
             return state;
         }
@@ -52,6 +57,18 @@ namespace EmbyProxyRouter.Tests
         public void ABypassedDestinationResolvesToNoProxy()
         {
             Assert.Null(new DynamicWebProxy(StateWith()).GetProxy(Lan));
+        }
+
+        /// <summary>
+        /// And with the switch at its default, the same LAN address is routed like anything else.
+        /// </summary>
+        [Fact]
+        public void ALanDestinationIsProxiedWhenTheSwitchIsOff()
+        {
+            var resolved = new DynamicWebProxy(StateWith(bypassPrivate: false)).GetProxy(Lan);
+
+            Assert.NotNull(resolved);
+            Assert.Equal("proxy.example.com", resolved.Host);
         }
 
         [Fact]

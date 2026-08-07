@@ -181,10 +181,13 @@ have a wrong position and a right one. .NET's own `WebProxy` draws the line in t
 list.
 
 `BypassRules.PrivateNetworks` — RFC1918, `169.254.0.0/16`, `fc00::/7`, `fe80::/10`, `*.local` — is
-merged only when `PluginOptions.BypassPrivateNetworks` is set, which it is by default. It is a
-safety net rather than policy: with it off, an unreachable proxy takes the
-server's own LAN with it. It is switchable because "everything, without exception, through the
-proxy" is a legitimate thing to want on a host whose only route outward is a tunnel.
+merged only when `PluginOptions.BypassPrivateNetworks` is set, which by default it is not. The
+default is that everything goes through the proxy, which is the answer needing no qualification for
+a plugin whose job is to route outbound traffic. Switching it on is for a server that also talks to
+its own LAN and does not want that traffic crossing a remote proxy, or dying with it.
+
+The default has a cost worth naming: an unreachable proxy takes the LAN with it, so another Emby
+server, a DLNA endpoint or a local metadata cache becomes unreachable along with the internet.
 
 `Parse` takes the flag as a required parameter rather than an optional one, for the same reason the
 fixed entries are merged inside it: a caller that can omit the question is a caller that will

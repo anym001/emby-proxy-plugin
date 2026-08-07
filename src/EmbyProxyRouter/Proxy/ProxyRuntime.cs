@@ -64,12 +64,11 @@ namespace EmbyProxyRouter.Proxy
             {
                 Logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe().Invariant() +
                             // Stated on every apply because it is not visible from the routing
-                            // decisions themselves, and switching it off is the direction that can
-                            // cost the server its own LAN. Upper case for the unusual value, so
-                            // scanning a log for it does not depend on reading carefully.
+                            // decisions themselves, and it decides whether a dead proxy also costs
+                            // the server its own LAN.
                             (settings.Bypass.BypassPrivateNetworks
                                 ? " | private networks bypassed"
-                                : " | private networks PROXIED"));
+                                : " | private networks proxied"));
             }
         }
     }
