@@ -213,13 +213,16 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 The workflow also triggers on `release: published`, because publishing a release through the GitHub
-UI (or the API) with a tag name that doesn't exist yet creates that tag through the Releases endpoint
-rather than a real push — that path emits a `release` event but never a `push` event, so `push: tags`
-alone never sees it and the tag is created with nothing built for it. On a `release` event
-`GITHUB_SHA`/`GITHUB_REF_NAME` resolve to the default branch tip, not the tag, so the checkout step
-and the tag-name resolution both read `github.event.release.tag_name` explicitly instead of trusting
-the ambient ref. Publishing a pre-existing tag as a release this way triggers both events for the same
-tag; the existing-release fallback below absorbs the duplicate run rather than failing.
+UI (or the API) for a tag that doesn't exist yet creates that tag through the Releases endpoint rather
+than a real push, and `push: tags` alone has been observed to miss that path entirely — no run at all,
+not even a failed one. Whether that path *also* fires a `push` event alongside `release` has proven
+inconsistent in practice, so `release: published` is the trigger this workflow actually relies on;
+`push: tags` stays for the plain `git push origin <tag>` path, which fires no `release` event at all.
+On a `release` event `GITHUB_SHA`/`GITHUB_REF_NAME` resolve to the default branch tip, not the tag, so
+the checkout step and the tag-name resolution both read `github.event.release.tag_name` explicitly
+instead of trusting the ambient ref. Both triggers can fire for the same tag - drafted then published,
+or published for an already-pushed tag; the existing-release fallback below absorbs the duplicate run
+rather than failing.
 
 If a release already exists for the tag — drafted in the UI beforehand, or the workflow re-run — the
 DLL is uploaded to it instead of the run failing.

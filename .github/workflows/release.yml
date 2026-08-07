@@ -11,10 +11,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  # Publishing a release through the GitHub UI (or the API) with a tag name
-  # that doesn't exist yet creates that tag via the Releases endpoint, which
-  # emits a `release` event but never a `push` event. `push: tags` alone
-  # never sees it, so the tag gets created and the plugin never gets built.
+  # `push: tags` alone misses a release published through the GitHub UI (or
+  # the API) for a tag that doesn't exist yet: whether that also fires a
+  # `push` event has proven inconsistent in practice, so `release: published`
+  # is the trigger this workflow actually relies on. Keeping both means an
+  # already-published release can see two runs for the same tag - harmless,
+  # since "Publish the release" below uploads to the existing release instead
+  # of failing when that happens.
   release:
     types: [published]
 
