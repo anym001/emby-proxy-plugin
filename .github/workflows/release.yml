@@ -127,7 +127,7 @@ jobs:
 
           Copy \`EmbyProxyRouter.dll\` into Emby's \`plugins\` folder and restart the
           server; see the [README](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/README.md#installation-unraid--docker)
-          for the exact steps and the ownership the file needs.
+          for the exact steps.
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then

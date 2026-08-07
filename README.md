@@ -30,22 +30,15 @@ This is intentional — the point of the project is a single, auditable responsi
 
 ## Installation (Unraid / Docker)
 
-The Emby container usually maps a host directory to `/config`. The plugin DLL belongs in its
-`plugins` subfolder.
+The Emby container usually maps a host directory to `/config`. Copy the plugin DLL into its
+`plugins` subfolder and restart the container.
 
 ```bash
 # On the Unraid host; adjust the path if needed:
-PLUGINS=/mnt/user/appdata/emby/plugins
-
-cp EmbyProxyRouter.dll "$PLUGINS/"
-chown 99:100 "$PLUGINS/EmbyProxyRouter.dll"
-chmod 644   "$PLUGINS/EmbyProxyRouter.dll"
+cp EmbyProxyRouter.dll /mnt/user/appdata/emby/plugins/
 
 docker restart emby
 ```
-
-`99:100` is `nobody:users` on Unraid — the same UID/GID the Emby container runs as. If the ownership
-is wrong, Emby ignores the file without comment.
 
 Then configure it in the dashboard under **Plugins → Proxy Router**.
 
