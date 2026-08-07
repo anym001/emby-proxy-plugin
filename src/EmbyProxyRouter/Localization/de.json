@@ -6,7 +6,6 @@
   "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Private Netze werden direkt angesprochen, sofern man das nicht abschaltet.",
 
   "LabelProxyStatus": "Proxy-Status",
-  "LabelFailurePolicy": "Verhalten bei Proxy-Ausfall",
   "LabelPatchStatus": "Patch-Status",
 
   "LabelEnableProxy": "Proxy aktivieren",
@@ -26,58 +25,43 @@
   "LabelIgnoreCert": "Zertifikatsprüfung ignorieren",
   "DescIgnoreCert": "Nötig für HTTPS-Proxies mit selbstsigniertem Zertifikat. Wirkt nur, solange der Proxy aktiviert und konfiguriert ist – dann aber für jede ausgehende Verbindung des Emby-Kerns: den Proxy selbst, die darüber getunnelten Ziele und die Ziele, die wegen der Bypass-Liste direkt hinausgehen.",
 
-  "LabelFailOpen": "Bei Proxy-Ausfall trotzdem direkt verbinden",
-  "DescFailOpen": "AUS (Standard, Fail-Closed): Ist der Proxy nicht erreichbar, werden betroffene Requests abgebrochen und protokolliert. EIN (Fail-Open): Requests gehen ohne Proxy direkt ins Internet – jeder solche Fall wird als Warnung geloggt.",
-
   "LabelBypassPrivate": "Private Netze am Proxy vorbeileiten",
-  "DescBypassPrivate": "EIN (Standard): private Netze (10.x, 172.16-31.x, 192.168.x), Link-Local, IPv6-ULA und *.local werden direkt angesprochen. AUS: sie laufen ebenfalls über den Proxy – unter Fail-Closed schneidet ein nicht erreichbarer Proxy den Server damit auch vom eigenen LAN ab. Nur ausschalten, wenn der Proxy wirklich der einzige Weg nach außen ist. Die eigene Loopback-Adresse läuft in keinem Fall über den Proxy.",
+  "DescBypassPrivate": "EIN (Standard): private Netze (10.x, 172.16-31.x, 192.168.x), Link-Local, IPv6-ULA und *.local werden direkt angesprochen. AUS: sie laufen ebenfalls über den Proxy – ein nicht erreichbarer Proxy schneidet den Server damit auch vom eigenen LAN ab. Nur ausschalten, wenn der Proxy wirklich der einzige Weg nach außen ist. Die eigene Loopback-Adresse läuft in keinem Fall über den Proxy.",
 
   "LabelBypassList": "Bypass-Liste",
   "DescBypassList": "Zusätzliche Einträge, einer pro Zeile. Erlaubt: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Es findet keine DNS-Auflösung statt – Hostnamen werden literal verglichen. Einträge hier kommen zu dem hinzu, was der Schalter darüber abdeckt, und gelten auch dann, wenn er aus ist. Embys Lizenzserver werden standardmäßig nicht umgangen – trage sie hier ein, wenn sie direkt angesprochen werden sollen.",
 
-  "LabelCheckUrlHttp": "Prüf-URL (HTTP)",
-  "DescCheckUrlHttp": "Prüft, ob der Proxy einfaches HTTP weiterleitet. Muss mit 2xx antworten; Weiterleitungen zählen nicht, da ihnen nicht gefolgt wird. Leer lassen, um diese Prüfung zu überspringen.",
-
-  "LabelCheckUrlHttps": "Prüf-URL (HTTPS)",
-  "DescCheckUrlHttps": "Prüft, ob der Proxy einen CONNECT-Tunnel öffnet – über diesen Weg läuft nahezu der gesamte Emby-Traffic. Ein Proxy kann HTTP weiterleiten und CONNECT trotzdem verweigern; deshalb wird beides geprüft und beides muss erfolgreich sein. Beide Felder leer lassen, um nur die TCP-Verbindung zu prüfen.",
-
-  "LabelCheckInterval": "Prüfintervall (Sekunden)",
-  "DescCheckInterval": "Zwischen {0} und {1} Sekunden.",
-
   "PatchCaption": "Patch",
   "PatchActive": "Aktiv – Traffic des Emby-Kerns läuft über dieses Plugin.",
-  "PatchDegraded": "Aktiv, aber der Proxy konnte mindestens einem HTTP-Handler nicht zugewiesen werden: {0} Diese Anfragen werden unter Fail-closed weiterhin blockiert, laufen aber nicht über den Proxy. Ein Neustart des Servers behebt das in der Regel.",
+  "PatchDegraded": "Aktiv, aber der Proxy konnte mindestens einem HTTP-Handler nicht zugewiesen werden: {0} Diese Anfragen werden blockiert statt ungeschützt gesendet, laufen aber nicht über den Proxy. Ein Neustart des Servers behebt das in der Regel.",
   "PatchInactive": "NICHT aktiv – {0} Es wird kein Traffic umgeleitet.",
   "UnknownError": "unbekannter Fehler",
-
-  "FailOpenCaption": "Fail-Open",
-  "FailOpenText": "Fällt der Proxy aus, gehen Requests OHNE Proxy direkt ins Internet (wird als Warnung geloggt).",
-  "FailClosedCaption": "Fail-Closed",
-  "FailClosedText": "Fällt der Proxy aus, werden betroffene Requests blockiert. Kein stiller Rückfall auf eine Direktverbindung.",
 
   "DisabledCaption": "Deaktiviert",
   "DisabledText": "Der Proxy ist ausgeschaltet; Emby verbindet sich direkt.",
   "ReachableCaption": "Erreichbar",
   "UnreachableCaption": "Nicht erreichbar",
-  "UnreachableSuffixFailOpen": " – Requests gehen derzeit direkt raus.",
-  "UnreachableSuffixFailClosed": " – Requests werden derzeit blockiert.",
-  "CheckingCaption": "Wird geprüft",
-  "CheckingTextFailOpen": "Noch kein Prüfergebnis. Bis dahin gehen Requests direkt raus.",
-  "CheckingTextFailClosed": "Noch kein Prüfergebnis. Bis dahin werden betroffene Requests blockiert.",
-  "NotCheckedYet": "Noch nicht geprüft",
-  "AgeSuffix": " (Stand: vor {0} s)",
+  "WarningCaption": "Funktioniert, mit Einschränkung",
+  "UnreachableSuffix": " Requests, die über den Proxy laufen sollen, schlagen fehl.",
 
-  "HealthProxyDisabled": "Proxy ist deaktiviert",
-  "HealthAddressInvalid": "Proxy-Adresse ist ungültig",
-  "HealthTcpOnlyOk": "TCP-Verbindung erfolgreich (kein HTTP-Check konfiguriert)",
-  "HealthAllHttpOk": "Alle {0} HTTP-Checks über {1} erfolgreich ({2} ms gesamt)",
-  "HealthUrlRequired": "TCP erreichbar, aber ein HTTP-Check ist fehlgeschlagen: {0}",
-  "HealthCheckFailed": "Prüfung fehlgeschlagen: {0}",
-  "HealthTcpTimeout": "TCP-Verbindung zu {0}:{1} nach {2} s abgelaufen",
-  "HealthTcpFailed": "TCP-Verbindung zu {0}:{1} fehlgeschlagen: {2}",
-  "HealthInvalidUrl": "Ungültige Prüf-URL: {0}",
-  "HealthHttpStatus": "{0} antwortete mit HTTP {1}",
-  "HealthUrlFailed": "{0} fehlgeschlagen: {1}",
+  "ProbeDisabled": "Der Proxy ist ausgeschaltet; Emby verbindet sich direkt.",
+  "ProbeAddressInvalid": "Die Proxy-Adresse ist ungültig.",
+  "ProbeFailed": "Die Prüfung konnte nicht ausgeführt werden: {0}",
+  "ProbeTcpTimeout": "Keine Antwort von {0}:{1} innerhalb von {2} s.",
+  "ProbeTcpFailed": "Keine Verbindung zu {0}:{1}: {2}",
+  "ProbeTcpOnlyOk": "{0} nimmt Verbindungen an. Ein HTTP-Proxy verrät nichts weiter, solange er keinen Request zum Weiterleiten bekommt – das belegt also Erreichbarkeit, nicht die Weiterleitung.",
+  "ProbeNotSocks5": "{0}:{1} nimmt Verbindungen an, antwortet aber nicht als SOCKS5-Proxy.",
+  "ProbeSocks5NoMethod": "Der SOCKS5-Proxy hat alle angebotenen Authentifizierungsmethoden abgelehnt.",
+  "ProbeSocks5Method": "Der SOCKS5-Proxy hat Methode {0} gewählt, die dieses Plugin nicht beherrscht.",
+  "ProbeSocks5Truncated": "Der SOCKS5-Proxy hat die Verbindung während der Anmeldung geschlossen.",
+  "ProbeSocks5CredentialTooLong": "Benutzername oder Passwort ist länger als die von SOCKS5 erlaubten 255 Bytes.",
+  "ProbeSocks5Ok": "{0} antwortet als SOCKS5-Proxy und verlangt keine Anmeldung.",
+  "ProbeSocks5AuthOk": "{0} antwortet als SOCKS5-Proxy und hat die Zugangsdaten akzeptiert.",
+  "ProbeSocks5AuthRejected": "Der SOCKS5-Proxy hat die Zugangsdaten für Benutzer „{0}“ abgelehnt.",
+  "ProbeSocks5AuthIgnored": "Der Proxy verlangt keine Anmeldung, Benutzername und Passwort werden also nicht verwendet. Was darauf baut, findet nicht statt.",
+  "ProbeTlsOk": "{0} hat den TLS-Handshake abgeschlossen.",
+  "ProbeTlsTimeout": "TLS-Handshake mit {0}:{1} ist abgelaufen.",
+  "ProbeTlsFailed": "TLS-Handshake fehlgeschlagen: {0}",
 
   "DescribeNoAuth": "{0} (ohne Auth)",
   "DescribeAuthAs": "{0} (Auth als {1})",
@@ -96,8 +80,5 @@
   "ErrInvalidCidr": "Ungültiger CIDR-Eintrag: {0}",
   "ErrInvalidIp": "Ungültige IP-Adresse in: {0}",
   "ErrInvalidPrefix": "Ungültige Präfixlänge in: {0}",
-  "ErrPrefixFamily": "Präfixlänge passt nicht zur Adressfamilie: {0}",
-  "ErrIntervalMin": "Das Prüfintervall muss mindestens {0} Sekunden betragen.",
-  "ErrIntervalMax": "Das Prüfintervall darf höchstens {0} Sekunden betragen.",
-  "ErrCheckUrlScheme": "Diese URL muss mit {0} beginnen"
+  "ErrPrefixFamily": "Präfixlänge passt nicht zur Adressfamilie: {0}"
 }

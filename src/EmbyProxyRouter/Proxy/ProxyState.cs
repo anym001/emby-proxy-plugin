@@ -4,14 +4,6 @@ using EmbyProxyRouter.Localization;
 
 namespace EmbyProxyRouter.Proxy
 {
-    public enum ProxyHealth
-    {
-        /// <summary>No check has completed yet.</summary>
-        Unknown = 0,
-        Reachable = 1,
-        Unreachable = 2
-    }
-
     public enum RouteDecision
     {
         /// <summary>Send directly, bypassing the proxy.</summary>
@@ -40,10 +32,8 @@ namespace EmbyProxyRouter.Proxy
         Misconfigured = 1,
         /// <summary>The destination is on the bypass list, compiled-in or user-supplied.</summary>
         Bypassed = 2,
-        ProxyReachable = 3,
-        /// <summary>No check has completed since the configuration was last applied.</summary>
-        ProxyNotChecked = 4,
-        ProxyUnreachable = 5
+        /// <summary>Everything else: it goes to the proxy.</summary>
+        Proxied = 3
     }
 
     /// <summary>
@@ -53,55 +43,27 @@ namespace EmbyProxyRouter.Proxy
     /// Both the <see cref="DynamicWebProxy"/> and the <see cref="ProxyGateHandler"/> must reach the
     /// same verdict for a given destination, so the verdict lives in exactly one method here rather
     /// than being reimplemented on both sides.
+    ///
+    /// There is deliberately no reachability state here. Whether the proxy is up is not an input to
+    /// routing: a configured proxy is used, and if it cannot be reached the request fails, exactly
+    /// as it does for curl, for a browser, or for any other program handed a proxy address. Making
+    /// it an input is what forces a plugin to poll something in order to answer, and it is only
+    /// needed to decide when to *stop* using the proxy — which this plugin never does.
+    /// <see cref="ProxyProbe"/> still exists, but only to tell the settings page whether the address
+    /// works; nothing here consults it.
     /// </remarks>
     public sealed class ProxyState
     {
         private ProxySettings _settings = ProxySettings.Disabled();
-        private HealthSnapshot _snapshot = HealthSnapshot.NotChecked;
 
         public ProxySettings Settings
         {
             get { return Volatile.Read(ref _settings); }
         }
 
-        public ProxyHealth Health
-        {
-            get { return Volatile.Read(ref _snapshot).Health; }
-        }
-
-        public DateTime? LastCheckUtc
-        {
-            get { return Volatile.Read(ref _snapshot).CheckedUtc; }
-        }
-
-        /// <summary>The detail of the last check, or null when none has completed.</summary>
-        /// <remarks>
-        /// Deferred rather than rendered, because it has two audiences: the settings page shows it
-        /// in the dashboard language, the log writes it in English. Keeping it unrendered also means
-        /// switching the display language re-renders the detail already on the page, instead of
-        /// leaving the previous language's text there until the next check overwrites it.
-        /// </remarks>
-        public LocalizedText LastCheckDetail
-        {
-            get { return Volatile.Read(ref _snapshot).Detail; }
-        }
-
         public void Apply(ProxySettings settings)
         {
             Volatile.Write(ref _settings, settings ?? ProxySettings.Disabled());
-
-            // A configuration change invalidates any previous reachability verdict: it may point at
-            // a completely different proxy. Under fail-closed this deliberately blocks traffic until
-            // the next check succeeds, rather than trusting a result from the old configuration.
-            Volatile.Write(ref _snapshot, HealthSnapshot.NotChecked);
-        }
-
-        /// <summary>Returns true when the health value changed.</summary>
-        public bool SetHealth(ProxyHealth health, LocalizedText detail)
-        {
-            var previous = Interlocked.Exchange(
-                ref _snapshot, new HealthSnapshot(health, DateTime.UtcNow, detail));
-            return previous.Health != health;
         }
 
         /// <summary>
@@ -124,11 +86,10 @@ namespace EmbyProxyRouter.Proxy
         /// to another, which is exactly the half-applied state <see cref="ProxySettings"/> is
         /// immutable to prevent.
         ///
-        /// The reason is not decoration. A user running fail-open needs to be able to see in the log
-        /// that a request went out directly because the proxy was down — the reference project's
-        /// habit of falling back silently is the specific behaviour this plugin rejects. It is
-        /// handed back as a code and only turned into text by <see cref="Explain"/>, at the point
-        /// where a line is actually written.
+        /// The reason is not decoration: a blocked request is entitled to be told why it failed, and
+        /// "the proxy address does not parse" is the one failure that would otherwise surface as
+        /// nothing at all. It is handed back as a code and only turned into text by
+        /// <see cref="Explain"/>, at the point where a line is actually written.
         /// </remarks>
         public RouteDecision Decide(ProxySettings settings, Uri destination, out RouteReason reason)
         {
@@ -145,11 +106,12 @@ namespace EmbyProxyRouter.Proxy
 
             if (settings.Endpoint == null)
             {
-                // Enabled but misconfigured. Under fail-closed this is not a reason to quietly send
-                // everything in the clear — that is precisely the silent-fallback behaviour this
-                // plugin is meant to avoid.
+                // Enabled but misconfigured, and the only case in the whole plugin that has to be
+                // blocked rather than routed. Every other destination has a proxy URI to hand to
+                // .NET, which then either reaches it or fails; here there is no URI, and an
+                // IWebProxy that returns null means "connect directly" — a leak.
                 reason = RouteReason.Misconfigured;
-                return settings.FailOpen ? RouteDecision.Direct : RouteDecision.Blocked;
+                return RouteDecision.Blocked;
             }
 
             if (settings.Bypass.IsBypassed(destination))
@@ -158,19 +120,8 @@ namespace EmbyProxyRouter.Proxy
                 return RouteDecision.Direct;
             }
 
-            // Read once, for the same reason the settings snapshot is passed in: a check completing
-            // between the two reads would otherwise pair one verdict with the other's explanation.
-            var health = Health;
-            if (health == ProxyHealth.Reachable)
-            {
-                reason = RouteReason.ProxyReachable;
-                return RouteDecision.ViaProxy;
-            }
-
-            reason = health == ProxyHealth.Unknown
-                ? RouteReason.ProxyNotChecked
-                : RouteReason.ProxyUnreachable;
-            return settings.FailOpen ? RouteDecision.Direct : RouteDecision.Blocked;
+            reason = RouteReason.Proxied;
+            return RouteDecision.ViaProxy;
         }
 
         /// <summary>
@@ -194,52 +145,17 @@ namespace EmbyProxyRouter.Proxy
                 case RouteReason.Disabled:
                     return Localizer.GetInvariant("LogReasonDisabled");
 
-                case RouteReason.Misconfigured:
-                    var detail = settings == null ? null : settings.ConfigError;
-                    return Localizer.GetInvariant("LogReasonMisconfigured") +
-                           (detail != null ? ": " + detail.Invariant() : string.Empty);
-
                 case RouteReason.Bypassed:
                     return Localizer.GetInvariant("LogReasonBypassed");
 
-                case RouteReason.ProxyReachable:
-                    return Localizer.GetInvariant("LogReasonReachable");
-
-                case RouteReason.ProxyNotChecked:
-                    return Localizer.GetInvariant("LogReasonNotChecked");
+                case RouteReason.Proxied:
+                    return Localizer.GetInvariant("LogReasonProxied");
 
                 default:
-                    return Localizer.GetInvariant("LogReasonUnreachable");
+                    var detail = settings == null ? null : settings.ConfigError;
+                    return Localizer.GetInvariant("LogReasonMisconfigured") +
+                           (detail != null ? ": " + detail.Invariant() : string.Empty);
             }
-        }
-
-        /// <summary>
-        /// The three values a check produces, swapped as one unit.
-        /// </summary>
-        /// <remarks>
-        /// The verdict, its timestamp and its detail text are written by the check timer and read by
-        /// the dashboard thread. Held as separate fields they could be observed half-updated — a new
-        /// verdict next to the previous run's explanation — and only the verdict itself would carry
-        /// a memory barrier. An immutable triple published with a single interlocked write makes the
-        /// three consistent by construction.
-        /// </remarks>
-        private sealed class HealthSnapshot
-        {
-            public static readonly HealthSnapshot NotChecked =
-                new HealthSnapshot(ProxyHealth.Unknown, null, null);
-
-            public HealthSnapshot(ProxyHealth health, DateTime? checkedUtc, LocalizedText detail)
-            {
-                Health = health;
-                CheckedUtc = checkedUtc;
-                Detail = detail;
-            }
-
-            public ProxyHealth Health { get; private set; }
-
-            public DateTime? CheckedUtc { get; private set; }
-
-            public LocalizedText Detail { get; private set; }
         }
     }
 }

@@ -35,9 +35,9 @@ namespace EmbyProxyRouter.Proxy
         /// other destination. Bypassing them meant a server whose only route outward *is* the proxy
         /// could not reach them at all, and the privacy argument for the bypass was thin — a licence
         /// check carries the key that identifies the installation either way, so sending it through
-        /// a proxy hides nothing. The cost of the change is stated plainly in README.md: under
-        /// fail-closed, a dead proxy now also stops Emby Premiere from validating. Do not re-add
-        /// them without reopening that trade-off.
+        /// a proxy hides nothing. The cost is stated plainly in README.md: a dead proxy now also
+        /// stops Emby Premiere from validating. Do not re-add them without reopening that
+        /// trade-off.
         /// </remarks>
         public const string Always =
             "127.0.0.0/8\n" +
@@ -50,8 +50,8 @@ namespace EmbyProxyRouter.Proxy
         /// <remarks>
         /// RFC1918, carrier-grade link-local, IPv6 ULA and mDNS. Bypassed by default because the
         /// alternative bites hard: with the text box empty, LAN traffic (other Emby servers, DLNA
-        /// endpoints, a local metadata cache) went out through a remote proxy, and under fail-closed
-        /// the server lost its own network whenever that proxy was down.
+        /// endpoints, a local metadata cache) went out through a remote proxy, and the server lost
+        /// its own network whenever that proxy was down.
         ///
         /// Switchable rather than fixed because "everything, without exception, goes through the
         /// proxy" is a legitimate thing to want — a server whose only route outward is a VPN or
@@ -213,7 +213,7 @@ namespace EmbyProxyRouter.Proxy
 
                 // "::ffff:10.0.0.1" is the same host as "10.0.0.1", but CidrRule compares the
                 // address family first, so the compiled-in IPv4 ranges would never see it — a LAN
-                // address would be sent through the proxy, or blocked under fail-closed, purely
+                // address would be sent through the proxy purely
                 // because of how it was spelled. Rules written in the mapped form keep working
                 // because the unmapped pass above still runs first.
                 if (ip.IsIPv4MappedToIPv6 && MatchesAnyCidr(ip.MapToIPv4()))

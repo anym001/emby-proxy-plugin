@@ -99,10 +99,9 @@ namespace EmbyProxyRouter.Tests
 
             foreach (var key in new[]
                      {
-                         "LogBlocked", "LogFailOpen", "LogSuppressed",
-                         "LogReasonDisabled", "LogReasonMisconfigured", "LogReasonBypassed",
-                         "LogReasonReachable", "LogReasonNotChecked", "LogReasonUnreachable",
-                         "LogCheckUrlInvalid", "LogCheckUrlScheme"
+                         "LogBlocked", "LogSuppressed",
+                         "LogReasonDisabled", "LogReasonMisconfigured",
+                         "LogReasonBypassed", "LogReasonProxied"
                      })
             {
                 Assert.True(english.ContainsKey(key), "en.json is missing " + key);
@@ -135,24 +134,24 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void GetInvariantIgnoresTheDisplayLanguage()
         {
-            var english = Localizer.Get("HealthProxyDisabled");
+            var english = Localizer.Get("ProbeDisabled");
 
             AsGerman(() =>
             {
                 // Sanity check that the culture switch actually took, or the assertion below would
                 // pass for the wrong reason.
-                Assert.NotEqual(english, Localizer.Get("HealthProxyDisabled"));
-                Assert.Equal(english, Localizer.GetInvariant("HealthProxyDisabled"));
+                Assert.NotEqual(english, Localizer.Get("ProbeDisabled"));
+                Assert.Equal(english, Localizer.GetInvariant("ProbeDisabled"));
             });
         }
 
         [Fact]
         public void FormatInvariantIgnoresTheDisplayLanguageToo()
         {
-            var english = Localizer.Format("HealthHttpStatus", "http://example.com/", 503);
+            var english = Localizer.Format("ProbeTcpFailed", "proxy.example.com", 1080, "refused");
 
             AsGerman(() =>
-                Assert.Equal(english, Localizer.FormatInvariant("HealthHttpStatus", "http://example.com/", 503)));
+                Assert.Equal(english, Localizer.FormatInvariant("ProbeTcpFailed", "proxy.example.com", 1080, "refused")));
         }
 
         // --- LocalizedText -----------------------------------------------------------------------
@@ -160,7 +159,7 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void LocalizedTextRendersPerDestination()
         {
-            var text = LocalizedText.Of("HealthProxyDisabled");
+            var text = LocalizedText.Of("ProbeDisabled");
             var english = text.Invariant();
 
             AsGerman(() =>
@@ -177,7 +176,7 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void ToStringIsTheEnglishRendering()
         {
-            var text = LocalizedText.Of("HealthProxyDisabled");
+            var text = LocalizedText.Of("ProbeDisabled");
 
             AsGerman(() => Assert.Equal(text.Invariant(), text.ToString()));
         }
@@ -190,8 +189,8 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void NestedMessagesFollowTheirParentsLanguage()
         {
-            var inner = LocalizedText.Of("HealthProxyDisabled");
-            var outer = LocalizedText.Of("HealthUrlRequired", inner);
+            var inner = LocalizedText.Of("ProbeDisabled");
+            var outer = LocalizedText.Of("ProbeFailed", inner);
 
             AsGerman(() =>
             {
@@ -233,12 +232,11 @@ namespace EmbyProxyRouter.Tests
                 var settings = ProxySettings.FromOptions(new PluginOptions
                 {
                     EnableProxy = true,
-                    ProxyAddress = "socks5://proxy.example.com:1080"
+                    ProxyAddress = "not a usable address"
                 });
 
                 var state = new ProxyState();
                 state.Apply(settings);
-                state.SetHealth(ProxyHealth.Unreachable, LocalizedText.Of("HealthAddressInvalid"));
 
                 var logger = new RecordingLogger();
                 using (var invoker = new HttpMessageInvoker(
@@ -255,7 +253,7 @@ namespace EmbyProxyRouter.Tests
                         failure = ex.Message;
                     }
 
-                    return Tuple.Create(logger.Warnings.Single(), failure);
+                    return Tuple.Create(logger.Errors.Single(), failure);
                 }
             };
 
@@ -266,7 +264,7 @@ namespace EmbyProxyRouter.Tests
 
             Assert.Equal(english.Item1, german.Item1);
             Assert.Equal(english.Item2, german.Item2);
-            Assert.Contains("proxy is unreachable", english.Item1);
+            Assert.Contains("misconfigured", english.Item1);
         }
 
         /// <summary>
@@ -279,30 +277,6 @@ namespace EmbyProxyRouter.Tests
             var english = Strings.LabelEnableProxy;
 
             AsGerman(() => Assert.NotEqual(english, Strings.LabelEnableProxy));
-        }
-
-        /// <summary>
-        /// A discarded check URL has one audience — the log — so it is English, always.
-        /// </summary>
-        /// <remarks>
-        /// Unlike <c>ConfigError</c> next door, nothing on the settings page shows these: the page
-        /// cannot produce one, because Validate rejects a bad check URL before it can be saved. So
-        /// they are rendered once, in English, rather than carried as a <see cref="LocalizedText"/>.
-        /// </remarks>
-        [Fact]
-        public void ADiscardedCheckUrlIsReportedInEnglishWhateverTheDisplayLanguage()
-        {
-            Func<string> warn = () => ProxySettings.FromOptions(new PluginOptions
-            {
-                EnableProxy = true,
-                ProxyAddress = "http://proxy.example.com:8080",
-                HealthCheckUrlHttp = "https://check.example.com/"
-            }).ConfigWarnings.Single();
-
-            var english = warn();
-            Assert.Contains("check.example.com", english);
-
-            AsGerman(() => Assert.Equal(english, warn()));
         }
 
         /// <summary>

@@ -64,8 +64,8 @@ namespace EmbyProxyRouter.Tests
         /// They were compiled-in bypass entries once. The privacy argument for that was thin — a
         /// licence check carries the key identifying the installation either way — while the cost
         /// was real: a server whose only route outward is the proxy could not reach them at all.
-        /// The accepted consequence, stated in README.md, is that a dead proxy under fail-closed now
-        /// also stops Premiere from validating.
+        /// The accepted consequence, stated in README.md, is that a dead proxy now also stops
+        /// Premiere from validating.
         ///
         /// Asserted explicitly rather than left to PublicDestinationsAreNotBypassed, so that
         /// re-adding them has to delete a test that says why they are gone.
@@ -143,8 +143,8 @@ namespace EmbyProxyRouter.Tests
         /// <remarks>
         /// The option exists for a host whose only route outward is a tunnel, where "everything,
         /// without exception" is the whole point and there is no direct path for this traffic to
-        /// take anyway. The cost is real and documented: under fail-closed an unreachable proxy now
-        /// takes the server's own LAN with it.
+        /// take anyway. The cost is real and documented: an unreachable proxy then takes the
+        /// server's own LAN with it.
         /// </remarks>
         [Theory]
         [InlineData("http://10.1.2.3/")]
@@ -209,7 +209,7 @@ namespace EmbyProxyRouter.Tests
         /// <remarks>
         /// CidrRule compares the address family before the bytes, so the compiled-in IPv4 ranges
         /// never saw a mapped address. A LAN destination was therefore sent through the proxy — or
-        /// blocked outright under fail-closed — purely because of how it had been spelled.
+        /// purely because of how it had been spelled.
         /// </remarks>
         [Theory]
         [InlineData("http://[::ffff:10.0.0.1]/")]

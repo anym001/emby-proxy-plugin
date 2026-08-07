@@ -2,7 +2,7 @@
 
   <!--
     Unit tests for the parts of the plugin that are decidable without a server: address parsing,
-    bypass matching, the routing verdict, the fail-closed gate and the log throttle. All of them are
+    bypass matching, the routing verdict, the gate, the proxy probe and the log throttle. All of them are
     pure functions over their inputs, which is what makes them worth testing here.
 
     What this project deliberately does NOT cover, because it cannot:

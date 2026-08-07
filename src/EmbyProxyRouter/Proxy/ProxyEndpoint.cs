@@ -181,8 +181,8 @@ namespace EmbyProxyRouter.Proxy
             // is taken verbatim into the authority, the getter parses the result back, and the port
             // lands in the path instead of the port field. "proxy.example.com/x:8080" parsed clean
             // and produced proxy.example.com **port 80** — a proxy on a port the user never wrote,
-            // with nothing anywhere saying so, and under fail-open every request going out directly
-            // once that port refused the connection.
+            // with nothing anywhere saying so, and every request then failing against a port
+            // nobody chose.
             //
             // Comparing the result against the input catches that whole family at once, rather than
             // the separators someone thought to blacklist today. Ordinal-ignore-case because Uri
@@ -220,7 +220,7 @@ namespace EmbyProxyRouter.Proxy
         /// that does not parse is much easier to fix when the message shows it. But those messages
         /// are not confined to the settings page: a parse error becomes
         /// <see cref="ProxySettings.ConfigError"/>, which <c>ProxyRuntime</c> writes to the Emby log
-        /// on every save, <c>ProxyState.Explain</c> embeds in every fail-closed block the gate
+        /// on every save, <c>ProxyState.Explain</c> embeds in every block the gate
         /// reports, and the health checker writes on every status change. The URL form of the
         /// address carries the proxy password, and an Emby log is routinely pasted into an issue.
         ///

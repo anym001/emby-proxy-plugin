@@ -108,8 +108,17 @@ without re-verifying, because each one is load-bearing:
 * **`DynamicWebProxy` must stay dynamic.** `SocketsHttpHandler` freezes its properties after the
   first request, and `CoreHttpClientManager` caches handlers per host with no eviction. A static
   `WebProxy` would require a server restart for every settings change.
-* **`ProxyGateHandler` exists because `IWebProxy` cannot block.** Returning `null` from `GetProxy`
-  means "connect directly" — a leak. Fail-closed needs a `DelegatingHandler` that can refuse.
+* **There is no reachability state, and adding one is a regression.** A configured proxy is used; if
+  it cannot be reached the request fails, because .NET never falls back to a direct connection. That
+  is the whole enforcement. Knowing in advance that the proxy is down is only useful in order to stop
+  using it, which this plugin never does — wanting that answer is what drags in a poller, a check URL
+  and a routing input that depends on a stranger's uptime.
+* **`ProxyGateHandler` exists for one case `IWebProxy` cannot express.** The proxy is switched on and
+  its address does not parse, so there is no URI to name; `null` from `GetProxy` means "connect
+  directly" — a leak. That single case needs a `DelegatingHandler` that can refuse. Do not grow it.
+* **`ProxyProbe` is a diagnostic, never a routing input.** It runs from the settings page only, talks
+  to the proxy and to nobody else, and stops before the proxy would connect anywhere. Nothing in
+  `ProxyState` may consult it.
 * **SOCKS5 credentials must live in `IWebProxy.Credentials`.** .NET ignores userinfo in a SOCKS
   proxy URI and will silently negotiate "no authentication". `ProxyEndpoint.TryParse` strips
   userinfo out of the URI on purpose — do not "restore" it.
@@ -124,7 +133,7 @@ changes.
 Three files, and the split is deliberate — do not let technical detail drift back into the README:
 
 * **`README.md` is for end users**: what the plugin does and does not do, installing it, the settings
-  table, fail-closed vs. fail-open, known limitations. No decompiled code, no CI internals, no
+  table, what happens when the proxy is down, known limitations. No decompiled code, no CI internals, no
   reasoning about .NET handler lifetimes.
 * **`ARCHITECTURE.md` is for anyone reading or changing the code**: the patch target, the verified
   SOCKS5 behaviour, why the proxy is dynamic and why the gate is a `DelegatingHandler`, localization
@@ -174,8 +183,8 @@ key by key.
 * `async` methods cannot take `out` parameters — use a small result struct (see `ProbeResult`).
 * Overriding `EditableObjectBase.Validate` requires `protected override`, not `protected internal`.
 * `EditMultilineAttribute` takes a required line count: `[EditMultiline(12)]`.
-* The health checker must build its **own** `SocketsHttpHandler`. If it used the patched pipeline, a
-  fail-closed block would prevent the very request meant to lift the block.
+* `ProxyProbe` talks to a raw `TcpClient`, not through `HttpClient`. Sending it through the patched
+  pipeline would have it check the proxy by way of the proxy.
 * Log only scheme, host and port for request URLs. Paths and query strings of metadata lookups carry
   title information and API keys.
 * The plugin constructor must not throw. A throwing constructor removes the plugin from the

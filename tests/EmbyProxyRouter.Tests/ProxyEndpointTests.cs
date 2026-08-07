@@ -213,7 +213,7 @@ namespace EmbyProxyRouter.Tests
         /// <remarks>
         /// A parse error is not confined to the settings page. It becomes
         /// <c>ProxySettings.ConfigError</c>, which ProxyRuntime writes to the Emby log on every
-        /// save, <c>ProxyState.Explain</c> embeds in every fail-closed block the gate reports, and
+        /// save, <c>ProxyState.Explain</c> embeds in every block the gate reports, and
         /// the health checker writes on every status change — and an Emby log is routinely pasted
         /// into an issue. <c>http://user:p@ss@proxy:8080</c> does not parse (the <c>@</c> in the
         /// password sees to that), so it took the message that echoed the whole address.
@@ -312,7 +312,7 @@ namespace EmbyProxyRouter.Tests
         /// a <c>/</c> verbatim into the authority, and the <c>Uri</c> getter then parses the result
         /// back with the port inside the path — so <c>proxy.example.com/x:8080</c> came out as
         /// <c>proxy.example.com</c> on **port 80**, without throwing and without a word anywhere.
-        /// Under fail-open that means every request goes out directly the moment port 80 refuses.
+        /// Every request then fails against a port nobody chose.
         /// </remarks>
         [Theory]
         [InlineData("proxy.example.com/path:8080")]

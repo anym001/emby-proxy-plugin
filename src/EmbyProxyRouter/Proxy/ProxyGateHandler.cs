@@ -8,7 +8,7 @@ using MediaBrowser.Model.Logging;
 namespace EmbyProxyRouter.Proxy
 {
     /// <summary>
-    /// Enforces the fail-closed policy and makes every routing decision visible in the Emby log.
+    /// Refuses the one request an <see cref="System.Net.IWebProxy"/> cannot.
     /// </summary>
     /// <remarks>
     /// Emby's handler factory is typed to return HttpMessageHandler and CoreHttpClientManager only
@@ -62,6 +62,17 @@ namespace EmbyProxyRouter.Proxy
         }
 
         /// <summary>Returns the exception to fail with, or null to let the request proceed.</summary>
+        /// <remarks>
+        /// Exactly one verdict is blocked, and it is the only one an IWebProxy cannot express: the
+        /// proxy is switched on but its address does not parse, so there is no URI to route to.
+        /// Returning null from GetProxy in that state means "connect directly", which is the leak
+        /// this plugin exists to prevent — hence a DelegatingHandler that can refuse outright.
+        ///
+        /// Every other destination is handed a proxy URI and left to .NET, which connects to the
+        /// proxy or fails trying. It never falls back to a direct connection, so nothing here has to
+        /// decide whether the proxy is up. That is what keeps this class small and keeps routing
+        /// free of any reachability state.
+        /// </remarks>
         private Exception Gate(HttpRequestMessage request)
         {
             var uri = request == null ? null : request.RequestUri;
@@ -70,65 +81,40 @@ namespace EmbyProxyRouter.Proxy
                 return null;
             }
 
-            // One snapshot for the verdict and for the follow-up question below, so the two cannot
+            // One snapshot for the verdict and for the message built from it, so the two cannot
             // straddle a configuration change and disagree about the same request.
             var settings = _state.Settings;
 
             RouteReason reason;
-            var decision = _state.Decide(settings, uri, out reason);
-
-            switch (decision)
+            if (_state.Decide(settings, uri, out reason) != RouteDecision.Blocked)
             {
-                case RouteDecision.Blocked:
-                    // The message is built even when the log line is suppressed: it is what the
-                    // caller gets as the failure, and every blocked request is entitled to be told
-                    // why it failed regardless of how many others failed the same way.
-                    var target = Redact(uri);
-                    var message = Localizer.FormatInvariant(
-                        "LogBlocked", target, ProxyState.Explain(reason, settings));
-
-                    int blockedSuppressed;
-                    if (ShouldLog(decision, reason, target, out blockedSuppressed))
-                    {
-                        _logger.Warn(message + SuppressedNote(blockedSuppressed));
-                    }
-
-                    return new HttpRequestException(message);
-
-                case RouteDecision.Direct:
-                    // Only worth a warning when the proxy was supposed to handle this and could not.
-                    // Bypass-list hits and a disabled plugin are expected, not incidents.
-                    if (settings.Enabled && reason != RouteReason.Bypassed)
-                    {
-                        var directTarget = Redact(uri);
-
-                        int directSuppressed;
-                        if (ShouldLog(decision, reason, directTarget, out directSuppressed))
-                        {
-                            _logger.Warn(Localizer.FormatInvariant(
-                                             "LogFailOpen",
-                                             directTarget,
-                                             ProxyState.Explain(reason, settings)) +
-                                         SuppressedNote(directSuppressed));
-                        }
-                    }
-
-                    return null;
-
-                default:
-                    return null;
+                return null;
             }
+
+            // The message is built even when the log line is suppressed: it is what the caller gets
+            // as the failure, and every blocked request is entitled to be told why it failed
+            // regardless of how many others failed the same way.
+            var target = Redact(uri);
+            var message = Localizer.FormatInvariant(
+                "LogBlocked", target, ProxyState.Explain(reason, settings));
+
+            int suppressed;
+            if (ShouldLog(reason, target, out suppressed))
+            {
+                _logger.Error(message + SuppressedNote(suppressed));
+            }
+
+            return new HttpRequestException(message);
         }
 
         /// <summary>
         /// Whether this event should reach the log, and how many like it were suppressed.
         /// </summary>
         /// <remarks>
-        /// The key carries the reason as well as the destination, so a host whose verdict changes —
-        /// unreachable to misconfigured, say — reports the change immediately instead of waiting out
-        /// a window opened by the previous one.
+        /// A misconfigured proxy blocks every request, and a library scan issues thousands. Without
+        /// this the one line that mattered — the first — is buried in the rest.
         /// </remarks>
-        private bool ShouldLog(RouteDecision decision, RouteReason reason, string target, out int suppressed)
+        private bool ShouldLog(RouteReason reason, string target, out int suppressed)
         {
             suppressed = 0;
 
@@ -137,7 +123,7 @@ namespace EmbyProxyRouter.Proxy
                 return true;
             }
 
-            return _throttle.ShouldLog((int)decision + "|" + (int)reason + "|" + target, out suppressed);
+            return _throttle.ShouldLog((int)reason + "|" + target, out suppressed);
         }
 
         private string SuppressedNote(int suppressed)

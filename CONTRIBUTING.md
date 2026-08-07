@@ -38,7 +38,7 @@ dotnet test -c Release tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 ```
 
 The tests cover the parts that are decidable without a server: address parsing, bypass matching, the
-routing verdict, the fail-closed gate, the log throttle. Add cases there when you change any of
+routing verdict, the gate, the proxy probe, the log throttle. Add cases there when you change any of
 those — a bug in them is invisible to everything else on this list.
 
 **A green test run is not evidence that the plugin works**, and neither is compiling. The tests say

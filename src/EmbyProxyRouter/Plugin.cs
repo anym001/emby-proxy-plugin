@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,16 +26,6 @@ namespace EmbyProxyRouter
 
         /// <summary>Logical name of the tile embedded by the csproj.</summary>
         private const string ThumbResource = "EmbyProxyRouter.thumb.png";
-
-        /// <summary>How long saving may block waiting for a reachability verdict.</summary>
-        /// <remarks>
-        /// Deliberately shorter than the probe budget (a TCP timeout plus one HTTP timeout per check
-        /// URL). A reachable proxy answers in well under a second, so the common case is covered,
-        /// while a dead one must not hold the dashboard for the full timeout chain.
-        /// </remarks>
-        private static readonly TimeSpan SaveCheckBudget = TimeSpan.FromSeconds(3);
-
-        private static readonly TimeSpan SaveCheckPoll = TimeSpan.FromMilliseconds(50);
 
         private readonly ILogger _logger;
 
@@ -112,15 +101,7 @@ namespace EmbyProxyRouter
 
         protected override PluginOptions OnBeforeShowUI(PluginOptions options)
         {
-            RefreshStatus(options);
-
-            // Kick off a check in the background so the next page load is current, without making
-            // the dashboard wait on network I/O.
-            if (ProxyRuntime.HealthChecker != null && options.EnableProxy)
-            {
-                ProxyRuntime.HealthChecker.Reschedule();
-            }
-
+            RefreshStatus(options, Probe(options));
             return options;
         }
 
@@ -129,71 +110,49 @@ namespace EmbyProxyRouter
             ProxyRuntime.ApplyOptions(options);
 
             // Emby renders this very object right after the save: PluginOptionsStore raises
-            // OptionsSaved with the same instance that PluginOptionsPageView hands back as the new
-            // view. So a status written here reaches the page without a reload — it just must not
-            // say "checking", which is what applying options leaves behind until the probe lands.
-            WaitForCheckResult(options);
-
-            RefreshStatus(options);
+            // OptionsSaved with the same instance PluginOptionsPageView hands back as the new view,
+            // so a status written here reaches the page without a reload.
+            RefreshStatus(options, Probe(options));
         }
 
         /// <summary>
-        /// Briefly blocks the save so the page can show a real verdict instead of "checking".
+        /// Runs the local proxy check for the page, on demand and never on a timer.
         /// </summary>
         /// <remarks>
-        /// Polls the shared state rather than only awaiting its own call, because
-        /// <see cref="ProxyRuntime.ApplyOptions"/> has already triggered a check and
-        /// <c>CheckNowAsync</c> returns immediately while that one holds the gate. Either probe
-        /// settles the question. Running out of budget is not an error: the periodic check fills the
-        /// status in shortly afterwards, which is exactly the old behaviour.
+        /// Blocking is acceptable and a timer is not, which is the whole shape of this design. The
+        /// probe talks only to the proxy, bounded by its own five-second timeout, and it runs at the
+        /// two moments a human is looking at the page. Nothing routes on the result — see
+        /// <see cref="ProxyProbe"/> — so there is no reason to keep one warm in the background, and
+        /// every reason not to: a periodic check is what would give the plugin an opinion about
+        /// reachability that its own routing then has to honour.
         /// </remarks>
-        private void WaitForCheckResult(PluginOptions options)
+        private ProbeResult Probe(PluginOptions options)
         {
-            var checker = ProxyRuntime.HealthChecker;
-            if (checker == null || !options.EnableProxy)
-            {
-                return;
-            }
-
             try
             {
+                var settings = ProxySettings.FromOptions(options);
+
                 // Task.Run keeps the blocking wait off any ambient synchronization context.
-                var unused = Task.Run(() => checker.CheckNowAsync(CancellationToken.None));
-
-                var deadline = DateTime.UtcNow + SaveCheckBudget;
-                while (DateTime.UtcNow < deadline)
-                {
-                    if (ProxyRuntime.State.Health != ProxyHealth.Unknown)
-                    {
-                        return;
-                    }
-
-                    Thread.Sleep(SaveCheckPoll);
-                }
-
-                if (_logger != null)
-                {
-                    _logger.Debug("Proxy Router: no check result within the save budget; " +
-                                  "the page shows 'checking' until the periodic check completes.");
-                }
+                return Task.Run(() => ProxyProbe.RunAsync(settings, CancellationToken.None))
+                    .GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
-                // Never let this cost the user their settings - they are already written to disk.
+                // Never let a diagnostic cost the user their settings - those are already written.
                 if (_logger != null)
                 {
-                    _logger.ErrorException("Reachability check during save failed.", ex);
+                    _logger.ErrorException("Proxy Router: the proxy check failed to run.", ex);
                 }
+
+                return new ProbeResult(ProbeVerdict.Failed, LocalizedText.Of("ProbeFailed", ex.Message));
             }
         }
 
         /// <summary>
-        /// Fills the three read-only status lines shown at the top of the settings page.
+        /// Fills the two read-only status lines shown at the top of the settings page.
         /// </summary>
-        private void RefreshStatus(PluginOptions options)
+        private void RefreshStatus(PluginOptions options, ProbeResult probe)
         {
-            var state = ProxyRuntime.State;
-
             // Patch status first: without the patch nothing else on this page has any effect, and
             // saying so plainly beats letting the user believe a green proxy means traffic is routed.
             if (HttpHandlerPatch.IsApplied && HttpHandlerPatch.DecorationFailureReason == null)
@@ -207,9 +166,9 @@ namespace EmbyProxyRouter
             }
             else if (HttpHandlerPatch.IsApplied)
             {
-                // The patch applied, but at least one handler could not be given the proxy. The
-                // gate still blocks those requests under fail-closed, so this is not "not active" —
-                // but reporting plain success would claim traffic is routed that is not.
+                // The patch applied, but at least one handler could not be given the proxy. Those
+                // requests are still blocked rather than leaking, so this is not "not active" — but
+                // reporting plain success would claim traffic is routed that is not.
                 options.PatchStatus = new StatusItem
                 {
                     Status = ItemStatus.Warning,
@@ -230,120 +189,48 @@ namespace EmbyProxyRouter
                 };
             }
 
-            options.FailurePolicy = options.AllowDirectWhenProxyUnavailable
-                ? new StatusItem
-                {
-                    Status = ItemStatus.Warning,
-                    Caption = Localizer.Get("FailOpenCaption"),
-                    StatusText = Localizer.Get("FailOpenText")
-                }
-                : new StatusItem
-                {
-                    Status = ItemStatus.Succeeded,
-                    Caption = Localizer.Get("FailClosedCaption"),
-                    StatusText = Localizer.Get("FailClosedText")
-                };
+            var detail = probe.Detail == null ? string.Empty : probe.Detail.Localized();
 
-            if (state == null || !options.EnableProxy)
+            switch (probe.Verdict)
             {
-                options.ProxyStatus = new StatusItem
-                {
-                    Status = ItemStatus.Unavailable,
-                    Caption = Localizer.Get("DisabledCaption"),
-                    StatusText = Localizer.Get("DisabledText")
-                };
-                return;
-            }
+                case ProbeVerdict.Disabled:
+                    options.ProxyStatus = new StatusItem
+                    {
+                        Status = ItemStatus.Unavailable,
+                        Caption = Localizer.Get("DisabledCaption"),
+                        StatusText = Localizer.Get("DisabledText")
+                    };
+                    break;
 
-            var detail = state.LastCheckDetail != null
-                ? state.LastCheckDetail.Localized()
-                : Localizer.Get("NotCheckedYet");
-            var age = state.LastCheckUtc.HasValue
-                ? Localizer.Format(
-                    "AgeSuffix",
-                    Math.Max(0, (int)(DateTime.UtcNow - state.LastCheckUtc.Value).TotalSeconds))
-                : string.Empty;
-
-            switch (state.Health)
-            {
-                case ProxyHealth.Reachable:
+                case ProbeVerdict.Ok:
                     options.ProxyStatus = new StatusItem
                     {
                         Status = ItemStatus.Succeeded,
                         Caption = Localizer.Get("ReachableCaption"),
-                        StatusText = detail + age
+                        StatusText = detail
                     };
                     break;
 
-                case ProxyHealth.Unreachable:
+                case ProbeVerdict.Warning:
                     options.ProxyStatus = new StatusItem
                     {
-                        Status = ItemStatus.Failed,
-                        Caption = Localizer.Get("UnreachableCaption"),
-                        StatusText = detail + age + Localizer.Get(
-                                         options.AllowDirectWhenProxyUnavailable
-                                             ? "UnreachableSuffixFailOpen"
-                                             : "UnreachableSuffixFailClosed")
+                        Status = ItemStatus.Warning,
+                        Caption = Localizer.Get("WarningCaption"),
+                        StatusText = detail
                     };
                     break;
 
                 default:
+                    // Misconfigured and Failed both mean traffic is not going where it should. The
+                    // difference is that a misconfigured address is blocked outright, while an
+                    // unreachable proxy simply fails to connect; the detail says which.
                     options.ProxyStatus = new StatusItem
                     {
-                        Status = ItemStatus.InProgress,
-                        Caption = Localizer.Get("CheckingCaption"),
-                        StatusText = Localizer.Get(
-                            options.AllowDirectWhenProxyUnavailable
-                                ? "CheckingTextFailOpen"
-                                : "CheckingTextFailClosed")
+                        Status = ItemStatus.Failed,
+                        Caption = Localizer.Get("UnreachableCaption"),
+                        StatusText = detail + Localizer.Get("UnreachableSuffix")
                     };
                     break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Starts the periodic reachability check once the server is up.
-    /// </summary>
-    /// <remarks>
-    /// Separate from the plugin constructor on purpose: the constructor runs during plugin discovery
-    /// and must stay free of network I/O, but the Harmony patch must be applied there. Splitting the
-    /// two keeps startup fast without letting handlers get created before the patch is in place.
-    /// </remarks>
-    public sealed class ProxyRouterEntryPoint : IServerEntryPoint
-    {
-        private readonly ILogger _logger;
-
-        public ProxyRouterEntryPoint(ILogManager logManager)
-        {
-            _logger = logManager.GetLogger("Proxy Router");
-        }
-
-        public void Run()
-        {
-            try
-            {
-                if (ProxyRuntime.HealthChecker == null)
-                {
-                    return;
-                }
-
-                ProxyRuntime.HealthChecker.Start();
-                _logger.Info("Proxy Router: reachability checks started, interval " +
-                             ((int)ProxyRuntime.State.Settings.HealthCheckInterval.TotalSeconds)
-                             .ToString(CultureInfo.InvariantCulture) + " s.");
-            }
-            catch (Exception ex)
-            {
-                _logger.ErrorException("Reachability checks could not be started.", ex);
-            }
-        }
-
-        public void Dispose()
-        {
-            if (ProxyRuntime.HealthChecker != null)
-            {
-                ProxyRuntime.HealthChecker.Dispose();
             }
         }
     }
