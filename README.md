@@ -1,8 +1,8 @@
 # Emby Proxy Router
 
 A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) traffic that the
-**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5** —
-while always contacting private networks directly.
+**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5**.
+Everything goes through it; what does not is something you configure.
 
 ## What this plugin does
 
@@ -121,7 +121,7 @@ is why there is no check URL to configure: fetching one would show a third party
 address every time, and make the verdict depend on that party's uptime. The trade-off is stated
 under Known limitations — this check cannot prove the proxy actually forwards traffic.
 
-### What is bypassed without any configuration
+### What bypasses the proxy
 
 **Never proxied, not switchable:**
 
