@@ -126,7 +126,7 @@ jobs:
           Built and verified against **Emby Server ${EMBY_VERSION}**.
 
           Copy \`EmbyProxyRouter.dll\` into Emby's \`plugins\` folder and restart the
-          server; see the [README](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/README.md#installation-unraid--docker)
+          server; see the [README](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/README.md#installation)
           for the exact steps.
           EOF
 

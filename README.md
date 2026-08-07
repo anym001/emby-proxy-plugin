@@ -28,7 +28,7 @@ This is intentional — the point of the project is a single, auditable responsi
 * **No** circumvention of Emby's licence check. The licensing servers are on the bypass list on
   purpose.
 
-## Installation (Unraid / Docker)
+## Installation
 
 The Emby container usually maps a host directory to `/config`. Copy the plugin DLL into its
 `plugins` subfolder and restart the container.
