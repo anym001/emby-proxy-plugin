@@ -38,7 +38,7 @@ dotnet test -c Release tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 ```
 
 The tests cover the parts that are decidable without a server: address parsing, bypass matching, the
-routing verdict, the fail-closed gate, the log throttle. Add cases there when you change any of
+routing verdict, the gate, the proxy probe, the log throttle. Add cases there when you change any of
 those — a bug in them is invisible to everything else on this list.
 
 **A green test run is not evidence that the plugin works**, and neither is compiling. The tests say
@@ -50,6 +50,12 @@ real as well.
 `verify-patch-target.sh` is mandatory when changing `build/emby-version.txt`. A Harmony postfix whose
 signature no longer matches never applies: the plugin installs cleanly, reports no error, and
 silently routes nothing.
+
+**The pinned Emby version is two files, not one.** `build/emby-version.txt` and the matching entry in
+`build/emby-sha256.txt` are changed together — the fetch script refuses to extract the pinned version
+without a checksum that matches, so bumping one alone leaves a pin nobody can build. A version other
+than the pinned one has no checksum by design; the script says so and continues, which is what a run
+checking a *new* Emby release needs. Nothing built that way is ever published.
 
 ## Conventions
 

@@ -7,10 +7,10 @@ namespace EmbyProxyRouter.Proxy
     /// Collapses a repeated log event into one line per key per time window.
     /// </summary>
     /// <remarks>
-    /// The gate writes a warning for every request it blocks or lets out under fail-open. That is
-    /// the right behaviour for one request and the wrong behaviour for a library scan: with the
-    /// proxy down, a few thousand metadata lookups produce a few thousand identical lines, and the
-    /// one line that mattered — the first — is buried in them.
+    /// The gate writes a line for every request it blocks. That is the right behaviour for one
+    /// request and the wrong behaviour for a library scan: with the proxy address misconfigured, a
+    /// few thousand metadata lookups produce a few thousand identical lines, and the one line that
+    /// mattered — the first — is buried in them.
     ///
     /// Throttling here is deliberately biased towards logging:
     ///

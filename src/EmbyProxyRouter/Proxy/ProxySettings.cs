@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using EmbyProxyRouter.Localization;
 
 namespace EmbyProxyRouter.Proxy
@@ -28,31 +26,18 @@ namespace EmbyProxyRouter.Proxy
 
         public BypassRules Bypass { get; private set; }
 
-        /// <summary>When true, an unreachable proxy falls back to a direct connection.</summary>
-        public bool FailOpen { get; private set; }
-
         public bool IgnoreCertificateValidation { get; private set; }
-
-        /// <summary>
-        /// Every entry must answer 2xx. The list is a set of assertions, not a fallback chain.
-        /// </summary>
-        /// <remarks>
-        /// One plain-HTTP and one HTTPS entry together prove that the proxy both forwards and
-        /// tunnels. A first-success-wins pass could not establish that: it would stop at the first
-        /// entry and never reach the second.
-        /// </remarks>
-        public IReadOnlyList<string> HealthCheckUrls { get; private set; }
-
-        public TimeSpan HealthCheckInterval { get; private set; }
 
         public static ProxySettings Disabled()
         {
             return new ProxySettings
             {
                 Enabled = false,
-                Bypass = BypassRules.Parse(null),
-                HealthCheckUrls = new string[0],
-                HealthCheckInterval = TimeSpan.FromSeconds(60)
+
+                // Matches the option's default so there is one answer to "what does an
+                // unconfigured plugin bypass". Academic either way: Enabled is false, so Decide
+                // returns Direct for every destination without consulting these rules at all.
+                Bypass = BypassRules.Parse(null, false)
             };
         }
 
@@ -63,33 +48,11 @@ namespace EmbyProxyRouter.Proxy
                 return Disabled();
             }
 
-            // HTTP first: it is the cheaper probe, and a proxy that refuses to forward at all should
-            // not cost a TLS handshake before the verdict is in.
-            var urls = new List<string>();
-            AddCheckUrl(urls, options.HealthCheckUrlHttp);
-            AddCheckUrl(urls, options.HealthCheckUrlHttps);
-
-            // Clamped at both ends. Validate rejects an out-of-range value entered on the page, but
-            // the options file can be edited directly and is read back without going through it, so
-            // the bound the UI advertises has to be enforced here as well or it is only a label.
-            var interval = options.HealthCheckIntervalSeconds;
-            if (interval < PluginOptions.MinCheckIntervalSeconds)
-            {
-                interval = PluginOptions.MinCheckIntervalSeconds;
-            }
-            else if (interval > PluginOptions.MaxCheckIntervalSeconds)
-            {
-                interval = PluginOptions.MaxCheckIntervalSeconds;
-            }
-
             var settings = new ProxySettings
             {
                 Enabled = options.EnableProxy,
-                Bypass = BypassRules.Parse(options.BypassList),
-                FailOpen = options.AllowDirectWhenProxyUnavailable,
-                IgnoreCertificateValidation = options.IgnoreCertificateValidation,
-                HealthCheckUrls = urls,
-                HealthCheckInterval = TimeSpan.FromSeconds(interval)
+                Bypass = BypassRules.Parse(options.BypassList, options.BypassPrivateNetworks),
+                IgnoreCertificateValidation = options.IgnoreCertificateValidation
             };
 
             ProxyEndpoint endpoint;
@@ -106,15 +69,6 @@ namespace EmbyProxyRouter.Proxy
             }
 
             return settings;
-        }
-
-        /// <summary>An empty field means "skip this probe", not "check an empty URL".</summary>
-        private static void AddCheckUrl(List<string> urls, string url)
-        {
-            if (!string.IsNullOrWhiteSpace(url))
-            {
-                urls.Add(url.Trim());
-            }
         }
     }
 }

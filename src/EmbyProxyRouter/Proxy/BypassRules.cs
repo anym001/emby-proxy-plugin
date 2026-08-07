@@ -19,50 +19,71 @@ namespace EmbyProxyRouter.Proxy
     public sealed class BypassRules
     {
         /// <summary>
-        /// Applied unconditionally, on top of whatever the user's list contains.
+        /// Applied unconditionally — not even the private-networks switch turns these off.
         /// </summary>
         /// <remarks>
-        /// Two groups, compiled in for the same reason: the README and the settings page promise
-        /// this behaviour, and leaving a promise to an editable default makes it a suggestion.
+        /// The server's own loopback interface. Nothing is gained by sending a request to 127.0.0.1
+        /// out to a proxy somewhere else, and everything is lost: the proxy has no route back to
+        /// this machine, so the request cannot succeed however the plugin is configured. Leaving it
+        /// switchable would only offer a setting whose "on" position is always wrong.
         ///
-        /// Private, loopback and link-local ranges — clearing the text box otherwise sent LAN
-        /// traffic (other Emby servers, DLNA endpoints, a local metadata cache) out through a remote
-        /// proxy, and under fail-closed cut the server off from its own network whenever that proxy
-        /// was down. There is no legitimate reason to proxy 127.0.0.0/8.
+        /// .NET's own <c>WebProxy</c> takes the same view — <c>IsBypassed</c> returns true for a
+        /// loopback host before it even looks at <c>BypassProxyOnLocal</c> or the bypass list.
         ///
-        /// Emby's licensing and Connect hosts — not guesswork, read out of the 4.9.5.0 assemblies:
-        ///   mb3admin.com        — PluginSecurityManager: /admin/service/registration/validate,
-        ///                         /admin/service/appstore/register, and the plugin catalog
-        ///                         (InstallationManager: www.mb3admin.com/admin/service/package/...)
-        ///   connect.emby.media  — Emby.Server.Connect: https://connect.emby.media/service/
-        /// Routing licence traffic through a proxy under fail-closed risks breaking Emby Premiere
-        /// activation, and obscuring licence identity is not what this plugin is for. Fixing them
-        /// here means nobody breaks activation with an edit whose consequence is not obvious.
-        ///
-        /// The trade-off, deliberately accepted: a server whose only route outward is the proxy
-        /// cannot reach these hosts at all. Lifting that would need a code change, not a setting.
+        /// Emby's licensing and Connect hosts (mb3admin.com, connect.emby.media) were once fixed
+        /// entries here and deliberately are not any more: they go through the proxy like every
+        /// other destination. Bypassing them meant a server whose only route outward *is* the proxy
+        /// could not reach them at all, and the privacy argument for the bypass was thin — a licence
+        /// check carries the key that identifies the installation either way, so sending it through
+        /// a proxy hides nothing. The cost is stated plainly in README.md: a dead proxy now also
+        /// stops Emby Premiere from validating. Do not re-add them without reopening that
+        /// trade-off.
         /// </remarks>
         public const string Always =
+            "127.0.0.0/8\n" +
+            "::1\n" +
+            "localhost";
+
+        /// <summary>
+        /// Merged on top of <see cref="Always"/> unless the user switches the bypass off.
+        /// </summary>
+        /// <remarks>
+        /// RFC1918, carrier-grade link-local, IPv6 ULA and mDNS. Merged only when the user asks for
+        /// it: the default is that everything goes through the proxy, which is the answer that needs
+        /// no qualification for a plugin whose job is to route outbound traffic.
+        ///
+        /// Switching it on is for a server that also talks to its own LAN — other Emby servers,
+        /// DLNA endpoints, a local metadata cache — and does not want that traffic crossing a
+        /// remote proxy, or dying with it. That is a real configuration, which is why the switch
+        /// exists rather than the ranges being fixed one way or the other.
+        ///
+        /// Address ranges and mDNS, and nothing beyond that. Anything matched on the shape of a
+        /// name — a dotless host, a guessed-at internal suffix — belongs in the user's bypass list,
+        /// where it is visible in the configuration rather than buried in a compiled-in rule. See
+        /// the end of <see cref="IsBypassed"/> for the rule that was tried and dropped.
+        /// </remarks>
+        public const string PrivateNetworks =
             "10.0.0.0/8\n" +
             "172.16.0.0/12\n" +
             "192.168.0.0/16\n" +
-            "127.0.0.0/8\n" +
             "169.254.0.0/16\n" +
-            "::1\n" +
             "fc00::/7\n" +
             "fe80::/10\n" +
-            "localhost\n" +
-            "*.local\n" +
-            "mb3admin.com\n" +
-            "*.mb3admin.com\n" +
-            "connect.emby.media";
+            "*.local";
 
         private readonly List<CidrRule> _cidrRules = new List<CidrRule>();
         private readonly HashSet<string> _exactHosts =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _suffixHosts = new List<string>();
+        private bool _bypassPrivateNetworks;
 
         public IReadOnlyList<string> Errors { get; private set; }
+
+        /// <summary>Whether <see cref="PrivateNetworks"/> is part of this rule set.</summary>
+        public bool BypassPrivateNetworks
+        {
+            get { return _bypassPrivateNetworks; }
+        }
 
         /// <summary>
         /// Parses the user's list, always on top of <see cref="Always"/>.
@@ -70,14 +91,23 @@ namespace EmbyProxyRouter.Proxy
         /// <remarks>
         /// The fixed entries are merged here rather than at the call sites so that every consumer —
         /// routing, validation, the disabled state — sees the same rule set. A second Parse overload
-        /// that skipped them would be one refactor away from becoming the one that gets called.
+        /// that skipped them would be one refactor away from becoming the one that gets called,
+        /// which is also why <paramref name="bypassPrivateNetworks"/> has no default: every caller
+        /// has to say which policy it means, rather than inheriting one it did not think about.
         /// </remarks>
-        public static BypassRules Parse(string text)
+        public static BypassRules Parse(string text, bool bypassPrivateNetworks)
         {
             var rules = new BypassRules();
             var errors = new List<string>();
 
+            rules._bypassPrivateNetworks = bypassPrivateNetworks;
+
             Add(rules, errors, Always);
+
+            if (bypassPrivateNetworks)
+            {
+                Add(rules, errors, PrivateNetworks);
+            }
 
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -163,6 +193,15 @@ namespace EmbyProxyRouter.Proxy
                 host = host.Substring(1, host.Length - 2);
             }
 
+            // A trailing dot only makes an FQDN explicit: "nas." is "nas" and "emby.local." is
+            // "emby.local". Folding it away means a rule matches whichever spelling reached us,
+            // for the same reason the IPv4-mapped form is folded below — a destination must not
+            // change route because of how it happened to be written.
+            if (host.Length > 1 && host[host.Length - 1] == '.')
+            {
+                host = host.Substring(0, host.Length - 1);
+            }
+
             IPAddress ip;
             if (IPAddress.TryParse(host, out ip))
             {
@@ -173,7 +212,7 @@ namespace EmbyProxyRouter.Proxy
 
                 // "::ffff:10.0.0.1" is the same host as "10.0.0.1", but CidrRule compares the
                 // address family first, so the compiled-in IPv4 ranges would never see it — a LAN
-                // address would be sent through the proxy, or blocked under fail-closed, purely
+                // address would be sent through the proxy purely
                 // because of how it was spelled. Rules written in the mapped form keep working
                 // because the unmapped pass above still runs first.
                 if (ip.IsIPv4MappedToIPv6 && MatchesAnyCidr(ip.MapToIPv4()))
@@ -200,6 +239,18 @@ namespace EmbyProxyRouter.Proxy
                 }
             }
 
+            // Deliberately no rule for dotless hostnames ("nas", "router"). One existed briefly and
+            // was removed: it is the only compiled-in rule that would have matched on the *shape* of
+            // a name rather than on an address range, and shape is a weaker justification than it
+            // first appears. A dotless name is unroutable on the public internet by convention, not
+            // by allocation — the compiled-in ranges are the latter, and mixing the two makes the
+            // fixed set harder to state than "these address ranges, plus mDNS".
+            //
+            // Anyone who reaches a NAS by short name can write "nas" in the bypass list, where an
+            // exact host entry matches it. That keeps the decision visible in the configuration
+            // instead of buried in a rule nobody can see. Note that .NET's own
+            // WebProxy(bypassOnLocal: true) does bypass these — that is one of several ways this
+            // plugin's switch is not that switch; see ARCHITECTURE.md.
             return false;
         }
 

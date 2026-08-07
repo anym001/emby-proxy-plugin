@@ -120,11 +120,16 @@ jobs:
       # immutable, and a hit skips the save. Without it, changing which files the
       # script keeps would leave an incomplete lib/ cached under a key that keeps
       # hitting - and every later run would re-download the .deb to fill the gap.
+      #
+      # build/emby-sha256.txt is in the key for the same reason turned around: a
+      # cache hit skips the download, and with it the checksum verification. A
+      # corrected checksum for an unchanged version has to invalidate the cache,
+      # or the assemblies it was meant to re-check would keep being served.
       - name: Cache Emby assemblies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: lib
-          key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
+          key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh', 'build/emby-sha256.txt') }}
 
       - name: Fetch Emby assemblies
         env:
@@ -224,6 +229,24 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
           printf '%s' "$VERSION" > build/emby-version.txt
+
+          # The pin is two files: the version and the checksum of the package that
+          # version resolves to. fetch-emby-refs.sh refuses to extract the pinned
+          # version without a matching entry, so bumping one without the other
+          # would land a pin that cannot be built.
+          #
+          # Streamed rather than saved - only the digest is wanted, and this job
+          # has no other use for 180 MB. Recording it here does not authenticate
+          # the upstream release; it fixes which artefact this repository was
+          # verified against, so every later fetch is checked against that one.
+          # The value lands in a pull request a human merges, which is where the
+          # decision to trust it is actually made.
+          package="emby-server-deb_${VERSION}_amd64.deb"
+          sum="$(curl -fsSL --retry 3 --retry-delay 2 \
+                   "https://github.com/MediaBrowser/Emby.Releases/releases/download/${VERSION}/${package}" \
+                 | sha256sum | cut -d' ' -f1)"
+          printf '%s  %s\n' "$sum" "$package" > build/emby-sha256.txt
+
           git commit -am "build: adopt Emby Server $VERSION"
           git push origin "$branch"
 
@@ -233,7 +256,9 @@ jobs:
           \`ci.yml\` verified the patch target against Emby Server **$VERSION** and passed: $RUN_URL
 
           Merging this bumps \`build/emby-version.txt\`, which is what \`release.yml\` builds
-          the next tag against.
+          the next tag against, and records the package checksum in
+          \`build/emby-sha256.txt\` so later fetches of that version are verified
+          against the artefact this run used.
           EOF
           )"
 

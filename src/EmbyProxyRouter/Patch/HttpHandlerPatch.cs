@@ -56,6 +56,23 @@ namespace EmbyProxyRouter.Patch
         /// </summary>
         private static readonly LogThrottle Throttle = new LogThrottle(WarningWindow);
 
+        /// <summary>
+        /// How long a connect attempt may take before it is given up on.
+        /// </summary>
+        /// <remarks>
+        /// .NET defaults SocketsHttpHandler.ConnectTimeout to infinite, leaving only
+        /// HttpClient.Timeout to bound it. That is tolerable when a failed connect means one failed
+        /// request, and it is not once every request goes to a single proxy: a proxy that drops
+        /// packets rather than refusing them — a VPN interface that went away is the usual shape —
+        /// then hangs every request for the full HTTP timeout, and a library scan stops rather than
+        /// fails. A refused connection is instant either way; this only bounds the silent case.
+        ///
+        /// Set on the handler because the plugin has already claimed responsibility for where this
+        /// traffic goes. Fifteen seconds is far beyond any healthy proxy on a LAN or over a tunnel,
+        /// and far below the hundred seconds it replaces.
+        /// </remarks>
+        private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(15);
+
         private static ProxyState _state;
         private static DynamicWebProxy _proxy;
         private static ILogger _logger;
@@ -69,7 +86,7 @@ namespace EmbyProxyRouter.Patch
         /// </summary>
         /// <remarks>
         /// Distinct from <see cref="FailureReason"/>, which means the patch never applied at all.
-        /// This is the in-between state: Emby is calling us, the fail-closed gate is in place, but
+        /// This is the in-between state: Emby is calling us, the gate is in place, but
         /// at least one handler is not carrying the proxy. That has to reach the dashboard. Reporting
         /// only "Active" would tell the user their traffic is routed while some of it is not.
         /// </remarks>
@@ -198,15 +215,15 @@ namespace EmbyProxyRouter.Patch
         }
 
         /// <summary>
-        /// Attaches the proxy to the handler Emby built, then wraps it in the fail-closed gate.
+        /// Attaches the proxy to the handler Emby built, then wraps it in the gate.
         /// </summary>
         /// <remarks>
         /// The two halves are separated on purpose. Configuring the inner handler can fail — its
         /// properties freeze after its first request, so assigning <c>Proxy</c> to one that has
         /// already been used throws — while wrapping it cannot. Letting a failure in the first half
-        /// skip the second would hand back a bare handler with neither a proxy nor a gate, which
-        /// under fail-closed is a silent fail-open: the one outcome this plugin exists to prevent.
-        /// So the gate goes on either way, and the failure is recorded for the dashboard.
+        /// skip the second would hand back a bare handler with neither a proxy nor a gate — every
+        /// request on it going out in the clear, which is the one outcome this plugin exists to
+        /// prevent. So the gate goes on either way, and the failure is recorded for the dashboard.
         /// </remarks>
         private static HttpMessageHandler Decorate(HttpMessageHandler handler)
         {
@@ -225,8 +242,8 @@ namespace EmbyProxyRouter.Patch
                 if (_logger != null)
                 {
                     _logger.ErrorException(
-                        "The proxy could not be applied to an HTTP handler. The fail-closed gate is " +
-                        "still in place, but requests on this handler will not use the proxy.", ex);
+                        "The proxy could not be applied to an HTTP handler. The gate is still in " +
+                        "place, but requests on this handler will not use the proxy.", ex);
                 }
             }
 
@@ -240,6 +257,7 @@ namespace EmbyProxyRouter.Patch
             {
                 sockets.Proxy = _proxy;
                 sockets.UseProxy = true;
+                sockets.ConnectTimeout = ConnectTimeout;
 
                 ApplyCertificatePolicy(sockets);
             }
@@ -261,7 +279,7 @@ namespace EmbyProxyRouter.Patch
                 else if (_logger != null)
                 {
                     _logger.Warn("Unknown handler type '" + handler.GetType().FullName +
-                                 "' - only the fail-closed gate will be applied.");
+                                 "' - only the gate will be applied.");
                 }
             }
         }
@@ -281,10 +299,10 @@ namespace EmbyProxyRouter.Patch
         ///     TLS behaviour exactly as it found it.
         ///
         /// What it still cannot narrow: with the proxy switched on, the relaxation also covers the
-        /// destinations that go out directly because they are on the bypass list — Emby's licensing
-        /// hosts among them. A certificate callback is handed the handshake, not the request, so
-        /// nothing here can tell one connection from another. Documented in README.md under "Known
-        /// limitations" rather than papered over.
+        /// destinations that go out directly because they are on the bypass list. A certificate
+        /// callback is handed the handshake, not the request, so nothing here can tell one
+        /// connection from another. Documented in README.md under "Known limitations" rather than
+        /// papered over.
         ///
         /// The setting is read per callback rather than baked in, because the handler's properties
         /// freeze after its first request: a value captured here could never be revised, and

@@ -54,6 +54,9 @@ namespace EmbyProxyRouter.Proxy
         ///
         /// 2. An explicit username field always wins over userinfo embedded in the URL, so there is
         ///    one obvious answer when both are filled in.
+        ///
+        /// Every rejection below quotes the offending input through <see cref="Redact"/>, never
+        /// directly: these errors reach the Emby log, and the URL form carries the proxy password.
         /// </remarks>
         public static bool TryParse(
             string address,
@@ -85,7 +88,7 @@ namespace EmbyProxyRouter.Proxy
                 Uri parsed;
                 if (!Uri.TryCreate(address, UriKind.Absolute, out parsed))
                 {
-                    error = LocalizedText.Of("ErrInvalidUrl", address);
+                    error = LocalizedText.Of("ErrInvalidUrl", Redact(address));
                     return false;
                 }
 
@@ -108,6 +111,17 @@ namespace EmbyProxyRouter.Proxy
             else
             {
                 scheme = fallbackScheme;
+
+                // Userinfo needs a scheme to sit behind. Without one there is no authority to anchor
+                // it to, and the port split below takes the last colon in the string — which for
+                // "alice:s3cret@proxy:1080" is the right one, but for "alice:s3cret@proxy" is the
+                // one inside the credentials, leaving the password quoted back as the failing port.
+                // Rejecting it up front removes that path and says what to do instead.
+                if (address.IndexOf('@') >= 0)
+                {
+                    error = LocalizedText.Of("ErrUserInfoNeedsScheme");
+                    return false;
+                }
 
                 var colon = address.LastIndexOf(':');
                 if (colon <= 0 || colon == address.Length - 1)
@@ -158,7 +172,24 @@ namespace EmbyProxyRouter.Proxy
             }
             catch (Exception)
             {
-                error = LocalizedText.Of("ErrInvalidHost", host);
+                error = LocalizedText.Of("ErrInvalidHost", Redact(host));
+                return false;
+            }
+
+            // The Uri that came back has to still be the host and the port that went in. UriBuilder
+            // validates a host far less than it validates a scheme: one containing a path separator
+            // is taken verbatim into the authority, the getter parses the result back, and the port
+            // lands in the path instead of the port field. "proxy.example.com/x:8080" parsed clean
+            // and produced proxy.example.com **port 80** — a proxy on a port the user never wrote,
+            // with nothing anywhere saying so, and every request then failing against a port
+            // nobody chose.
+            //
+            // Comparing the result against the input catches that whole family at once, rather than
+            // the separators someone thought to blacklist today. Ordinal-ignore-case because Uri
+            // lowercases a host and the host:port form arrives exactly as it was typed.
+            if (uri.Port != port || !string.Equals(uri.Host, host, StringComparison.OrdinalIgnoreCase))
+            {
+                error = LocalizedText.Of("ErrInvalidHost", Redact(host));
                 return false;
             }
 
@@ -179,6 +210,66 @@ namespace EmbyProxyRouter.Proxy
                 Scheme = scheme
             };
             return true;
+        }
+
+        /// <summary>
+        /// The address with any embedded password masked, safe to quote in a message.
+        /// </summary>
+        /// <remarks>
+        /// Every rejection in <see cref="TryParse"/> quotes what was entered, because an address
+        /// that does not parse is much easier to fix when the message shows it. But those messages
+        /// are not confined to the settings page: a parse error becomes
+        /// <see cref="ProxySettings.ConfigError"/>, which <c>ProxyRuntime</c> writes to the Emby log
+        /// on every save, <c>ProxyState.Explain</c> embeds in every block the gate
+        /// reports, and the health checker writes on every status change. The URL form of the
+        /// address carries the proxy password, and an Emby log is routinely pasted into an issue.
+        ///
+        /// So the password comes out before the message is built. The username stays: it is already
+        /// in the log by way of <see cref="Describe"/>, and it is frequently the thing that is wrong.
+        ///
+        /// Textual rather than through <see cref="Uri"/> on purpose — this runs precisely on the
+        /// inputs <see cref="Uri"/> refused, so there is no parsed form left to ask. The userinfo is
+        /// taken as everything up to the *last* <c>@</c> of the authority, because a password may
+        /// contain one itself; that is exactly the input which made this necessary.
+        /// </remarks>
+        private static string Redact(string address)
+        {
+            if (string.IsNullOrEmpty(address))
+            {
+                return address;
+            }
+
+            var schemeEnd = address.IndexOf("://", StringComparison.Ordinal);
+            var start = schemeEnd < 0 ? 0 : schemeEnd + 3;
+            if (start >= address.Length)
+            {
+                return address;
+            }
+
+            var end = address.IndexOfAny(new[] { '/', '?', '#' }, start);
+            if (end < 0)
+            {
+                end = address.Length;
+            }
+
+            var authority = address.Substring(start, end - start);
+
+            var at = authority.LastIndexOf('@');
+            if (at < 0)
+            {
+                return address;
+            }
+
+            // No colon means a username with no password — nothing secret to hide.
+            var userInfo = authority.Substring(0, at);
+            var colon = userInfo.IndexOf(':');
+            if (colon < 0)
+            {
+                return address;
+            }
+
+            return address.Substring(0, start) + userInfo.Substring(0, colon + 1) + "***" +
+                   address.Substring(start + at);
         }
 
         /// <summary>

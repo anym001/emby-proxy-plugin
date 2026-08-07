@@ -5,82 +5,41 @@ namespace EmbyProxyRouter.Tests
 {
     public class ProxySettingsTests
     {
-        // --- Check interval ---------------------------------------------------------------------
+        // --- The private-networks switch ----------------------------------------------------------
 
         /// <summary>
-        /// Regression: the upper bound the settings page advertises was not enforced anywhere.
+        /// The switch defaults to off: everything goes through the proxy unless asked otherwise.
         /// </summary>
         /// <remarks>
-        /// <c>[MaxValue(3600)]</c> constrains the spinner on the page, and nothing else. Emby reads
-        /// the options back out of a JSON file under /config/plugins/configurations/, which can be
-        /// edited by hand and does not go through Validate — so a value above the ceiling was taken
-        /// verbatim, and the page's claimed range was decoration.
+        /// Also the migration behaviour, which is why it is pinned rather than left implicit: an
+        /// options file written before the switch existed carries no such field, so deserialization
+        /// leaves the property at its default and that installation starts proxying LAN traffic.
         /// </remarks>
+        [Fact]
+        public void PrivateNetworksAreProxiedByDefault()
+        {
+            Assert.False(new PluginOptions().BypassPrivateNetworks);
+            Assert.False(ProxySettings.Disabled().Bypass.BypassPrivateNetworks);
+            Assert.False(ProxySettings.FromOptions(null).Bypass.BypassPrivateNetworks);
+        }
+
         [Theory]
-        [InlineData(0, PluginOptions.MinCheckIntervalSeconds)]
-        [InlineData(-30, PluginOptions.MinCheckIntervalSeconds)]
-        [InlineData(9, PluginOptions.MinCheckIntervalSeconds)]
-        [InlineData(10, 10)]
-        [InlineData(60, 60)]
-        [InlineData(3600, 3600)]
-        [InlineData(3601, PluginOptions.MaxCheckIntervalSeconds)]
-        [InlineData(86400, PluginOptions.MaxCheckIntervalSeconds)]
-        [InlineData(int.MaxValue, PluginOptions.MaxCheckIntervalSeconds)]
-        public void TheCheckIntervalIsClampedAtBothEnds(int configured, int expected)
+        [InlineData(true, true)]
+        [InlineData(false, false)]
+        public void TheSwitchReachesTheRuleSet(bool configured, bool expected)
         {
             var settings = ProxySettings.FromOptions(new PluginOptions
             {
                 EnableProxy = true,
                 ProxyAddress = "http://proxy.example.com:8080",
-                HealthCheckIntervalSeconds = configured
+                BypassPrivateNetworks = configured
             });
 
-            Assert.Equal(expected, (int)settings.HealthCheckInterval.TotalSeconds);
-        }
+            Assert.Equal(expected, settings.Bypass.BypassPrivateNetworks);
+            Assert.Equal(expected, settings.Bypass.IsBypassed(new System.Uri("http://192.168.1.10/")));
 
-        [Fact]
-        public void TheAdvertisedBoundsAreTheEnforcedOnes()
-        {
-            // The page, the validation message and the clamp all read these two constants. If that
-            // ever stops being true, the UI starts promising something the code does not do.
-            Assert.True(PluginOptions.MinCheckIntervalSeconds > 0);
-            Assert.True(PluginOptions.MaxCheckIntervalSeconds > PluginOptions.MinCheckIntervalSeconds);
-        }
-
-        // --- Check URLs -------------------------------------------------------------------------
-
-        /// <summary>
-        /// HTTP first: it is the cheaper probe, and a proxy that refuses to forward at all should
-        /// not cost a TLS handshake before the verdict is in.
-        /// </summary>
-        [Fact]
-        public void BothCheckUrlsAreKeptWithHttpFirst()
-        {
-            var settings = ProxySettings.FromOptions(new PluginOptions
-            {
-                EnableProxy = true,
-                ProxyAddress = "http://proxy.example.com:8080",
-                HealthCheckUrlHttp = "http://check.example.com/",
-                HealthCheckUrlHttps = "https://check.example.com/"
-            });
-
-            Assert.Equal(2, settings.HealthCheckUrls.Count);
-            Assert.StartsWith("http://", settings.HealthCheckUrls[0]);
-            Assert.StartsWith("https://", settings.HealthCheckUrls[1]);
-        }
-
-        [Fact]
-        public void AnEmptyCheckUrlMeansSkipRatherThanCheckNothing()
-        {
-            var settings = ProxySettings.FromOptions(new PluginOptions
-            {
-                EnableProxy = true,
-                ProxyAddress = "http://proxy.example.com:8080",
-                HealthCheckUrlHttp = "   ",
-                HealthCheckUrlHttps = null
-            });
-
-            Assert.Empty(settings.HealthCheckUrls);
+            // Loopback is not the switch's to give away.
+            Assert.True(settings.Bypass.IsBypassed(new System.Uri("http://127.0.0.1/")));
         }
 
         // --- Endpoint and errors ----------------------------------------------------------------
@@ -116,34 +75,34 @@ namespace EmbyProxyRouter.Tests
             Assert.False(settings.Enabled);
             Assert.Null(settings.Endpoint);
             Assert.NotNull(settings.Bypass);
-            Assert.Empty(settings.HealthCheckUrls);
         }
 
         /// <summary>
-        /// The disabled snapshot still carries the compiled-in bypass rules, so a caller that reads
-        /// it before any configuration lands cannot conclude that nothing is bypassed.
+        /// The disabled snapshot still carries the unconditional rules, so a caller reading it
+        /// before any configuration lands cannot conclude that nothing at all is bypassed.
         /// </summary>
         [Fact]
-        public void TheDisabledSnapshotStillCarriesTheBypassRules()
+        public void TheDisabledSnapshotStillCarriesTheUnconditionalRules()
         {
             var settings = ProxySettings.Disabled();
 
             Assert.False(settings.Enabled);
-            Assert.True(settings.Bypass.IsBypassed(new System.Uri("http://192.168.1.1/")));
+            Assert.True(settings.Bypass.IsBypassed(new System.Uri("http://127.0.0.1/")));
+
+            // And not the switchable ones, matching the option's default.
+            Assert.False(settings.Bypass.IsBypassed(new System.Uri("http://192.168.1.1/")));
         }
 
         [Fact]
-        public void TheFailurePolicyAndCertificateFlagCarryThrough()
+        public void TheCertificateFlagCarriesThrough()
         {
             var settings = ProxySettings.FromOptions(new PluginOptions
             {
                 EnableProxy = true,
                 ProxyAddress = "https://proxy.example.com:8443",
-                AllowDirectWhenProxyUnavailable = true,
                 IgnoreCertificateValidation = true
             });
 
-            Assert.True(settings.FailOpen);
             Assert.True(settings.IgnoreCertificateValidation);
         }
     }

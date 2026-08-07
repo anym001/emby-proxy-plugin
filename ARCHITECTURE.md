@@ -58,12 +58,30 @@ A statically assigned proxy would therefore be frozen until the server restarts.
 `GetProxy()` per request, changes to the address, the bypass list and the on/off switch take effect
 immediately instead — even on long-cached handlers.
 
-## Why a `DelegatingHandler` for fail-closed
+## Why there is no reachability state
 
-An `IWebProxy` can only *choose a proxy* or return `null` — and `null` means "connect directly",
-which is precisely the leak fail-closed is meant to prevent. The plugin therefore additionally wraps
-the handler in a `DelegatingHandler` that can actively refuse a request. This is safe because
-`CoreHttpClientManager` only ever passes the result to `new HttpClient(handler)` and never casts it.
+A configured proxy is used, and if it cannot be reached the request fails. .NET never falls back to
+a direct connection on its own, so naming the proxy in `GetProxy` *is* the enforcement — nothing has
+to decide whether the proxy is up.
+
+That is worth stating because the alternative is seductive and expensive. Knowing in advance that
+the proxy is down is only useful in order to *stop* using it, which this plugin never does. Wanting
+that answer is what forces a poller, a check URL, a reachability state feeding routing, and a startup
+window in which the verdict is not yet in — and it makes routing depend on whatever host the check
+URL points at. Radarr, curl and every browser take the same view: `HttpProxySettings` there has no
+check URL, no interval and no health field, and its `ProxyCheck` only paints a banner.
+
+## Why a `DelegatingHandler` is still needed
+
+For exactly one case. An `IWebProxy` can only *choose a proxy* or return `null`, and `null` means
+"connect directly" — so when the proxy is switched on with an address that does not parse, there is
+no URI to name and the resolver cannot refuse. The plugin therefore wraps the handler in a
+`DelegatingHandler` that can. This is safe because `CoreHttpClientManager` only ever passes the
+result to `new HttpClient(handler)` and never casts it.
+
+The handler also bounds `ConnectTimeout`, which .NET leaves infinite: once every request goes to a
+single proxy, one that drops packets rather than refusing them hangs each of them for the full
+`HttpClient.Timeout`.
 
 `ProxyState.Decide` is the single routing authority behind both: the proxy and the gate must never
 reach different verdicts for the same destination. Callers that need the verdict *and* the settings
@@ -75,12 +93,12 @@ another's endpoint.
 and the caller that only wants the verdict — the resolver's bypass check — would otherwise pay for a
 culture lookup and a dictionary read it discards. `ProxyState.Explain` turns a reason into text at
 the point a line is actually written, which also keeps the routing core independent of the
-localization layer. The reason itself is not optional: a user running fail-open has to be able to
-see in the log that a request went out directly *because* the proxy was down.
+localization layer. The reason itself is not optional: a blocked request is entitled to say why,
+and "the address does not parse" is the one failure that would otherwise surface as nothing at all.
 
 ### Why the warnings are throttled
 
-The gate writes a warning per blocked or fail-open request, which is right for one request and wrong
+The gate writes a line per blocked request, which is right for one request and wrong
 for a library scan — a few thousand lookups against a dead proxy bury the first line, the one that
 mattered, under a few thousand identical ones. `LogThrottle` collapses them to one line per
 destination and reason per minute, shared across every gate instance because Emby caches a handler
@@ -94,8 +112,8 @@ every blocked request still fails, and still carries its own explanation to its 
 
 The gate is also why `Decorate` separates configuring the inner handler from wrapping it. Assigning
 `Proxy` to a `SocketsHttpHandler` that has already served a request throws, and letting that failure
-skip the wrap would hand Emby a bare handler with neither a proxy nor a gate — under fail-closed a
-silent fail-open, the one outcome the plugin exists to prevent. So the gate goes on either way and
+skip the wrap would hand Emby a bare handler with neither a proxy nor a gate, every request on it
+going out in the clear — the one outcome the plugin exists to prevent. So the gate goes on either way and
 the failure is surfaced as a third patch state on the settings page, between "Active" and "NOT
 active".
 
@@ -119,125 +137,102 @@ nothing for it to excuse, and a disabled plugin has to leave Emby's TLS behaviou
 
 What this still cannot do is distinguish connections. The callback receives the handshake, not the
 request that triggered it, so while the option is in effect it also covers destinations that go out
-directly because they are on the bypass list — Emby's licensing hosts among them. Narrowing that
+directly because they are on the bypass list. Narrowing that
 would mean correlating a handshake back to a request through the connection pool, which is not a
 mechanism worth introducing for an option that is off by default. It is documented in README.md
 under "Known limitations" instead.
 
-## The reachability check
+## The settings-page check
 
-`ProxyHealthChecker` builds its **own** `SocketsHttpHandler` and never travels through the patched
-Emby pipeline. If it used the gated pipeline, a fail-closed block would prevent the very request
-meant to determine whether the block should still apply. Its proxy is a `FixedProxy` that ignores
-the bypass list, because the point is to test the proxy itself.
+`ProxyProbe` answers one question — is this address really a working proxy? — on demand, from
+`OnBeforeShowUI` and `OnOptionsSaved`, and never on a timer. Nothing in `ProxyState` consults it; a
+failure here does not move a single request.
 
-That handler is built once per configuration and reused, keyed on the `ProxySettings` instance by
-reference — sound precisely because the snapshot is immutable and replaced wholesale, so a changed
-configuration is necessarily a different object and cannot keep probing through a handler built for
-the old proxy. A handler per probe meant a fresh connection for every check URL of every cycle, none
-of them reused; reusing one also exercises the proxy the way Emby's own traffic does, over a pooled
-connection rather than a cold one.
+It talks to the proxy and to nobody else, stopping before the point where the proxy would open an
+outbound connection:
 
-It is disposed on a configuration change, and on shutdown only if no probe is in flight. Taking it
-from a live probe would surface as an `ObjectDisposedException` inside `CheckNowAsync`, whose
-catch-all would dutifully report the proxy unreachable while the server is shutting down; losing the
-handler to the garbage collector is the cheaper mistake.
+| Scheme | What is established | How far it goes |
+| --- | --- | --- |
+| `socks5` | it speaks SOCKS5, and it accepted the credentials | greeting + RFC1929 sub-negotiation |
+| `https` | it completes a TLS handshake | `SslStream.AuthenticateAsClientAsync` |
+| `http` | something accepts connections on that port | TCP connect |
 
-Both check URLs must answer 2xx. A first-success-wins pass would stop at the plain-HTTP entry and
-never exercise the CONNECT tunnel, so a proxy that forwards HTTP and refuses CONNECT would report
-healthy while nearly all of Emby's traffic failed.
+Both SOCKS5 methods are offered, the way .NET's own client does, so that the reply says which one
+the proxy chose. A proxy answering "no authentication" to a configuration that carries a username
+yields a setup that looks authenticated and is not — the same trap that makes `ProxyEndpoint` move
+credentials out of the URI — and that is reported as a distinct warning verdict rather than as plain
+success. Offering only the authenticated method would have hidden it behind a bare rejection.
 
-## Localization
-
-The settings page follows the server's display language, and the plugin has **no language setting of
-its own**. Emby applies the configured display language process-wide, in
-`Emby.Server.Implementations.ApplicationHost.SetDefaultThreadCulture`:
-
-```csharp
-string uICulture = ServerConfigurationManager.Configuration.UICulture;
-...
-CultureInfo.DefaultThreadCurrentUICulture = (CultureInfo.CurrentUICulture = cultureInfo);
-```
-
-That method is called from the host constructor **and** from `OnConfigurationUpdated`, and the server
-installs no per-request localization middleware. So `CultureInfo.CurrentUICulture` is exactly the
-dashboard language, and `Localizer` reading it at lookup time picks up a change without a restart. A
-second, independent switch would let the plugin page disagree with the rest of the dashboard.
-
-Translations live in `src/EmbyProxyRouter/Localization/*.json` and are embedded into the DLL at build
-time. `en.json` is the reference: any key missing from another file falls back to English key by key,
-so an incomplete translation degrades to mixed language rather than to blank labels. Culture names
-are matched exactly first, then by their neutral part — `de-AT` uses `de.json`, while a `pt-BR.json`
-added later would win over `pt.json` for Brazilian Portuguese.
-
-Labels and descriptions are wired through Emby's own localization attributes
-(`[DisplayNameL(nameof(Strings.X), typeof(Strings))]`) rather than literal strings. The attribute
-resolves through `LocalizableString`, which requires a **public static string property with a
-getter**; it caches the reflected `PropertyInfo` but re-invokes the getter on every read, which is
-the other half of what makes a live language change work.
-
-### The log is not localized
-
-The dashboard follows the display language; **the Emby log is always English.** A log line is read by
-whoever is debugging the server, which is often not the person whose language is set, and usually
-away from the machine — pasted into an issue, or grepped for a phrase taken from this documentation.
-Translating it costs both of those and buys nothing, since the person reading it did not choose the
-language it came out in.
-
-The split is mechanical rather than a matter of care, so it can be checked:
-
-* Keys written to the log are prefixed `Log` and exist in **`en.json` only**. They resolve through
-  `Localizer.GetInvariant` / `FormatInvariant`, which read the English table directly and ignore
-  `CurrentUICulture` entirely.
-* A translation that defines a `Log*` key fails the build. `LogLanguageTests` walks every embedded
-  language file and rejects one — the mistake it guards against is a well-meaning translator, and a
-  German sentence in the log is not something the compiler would otherwise notice.
-
-Some values genuinely have both audiences: the reachability detail is shown on the settings page and
-written to the log, and it quotes the endpoint description and the failing probe's error, which are
-in the same position. Those are carried as `LocalizedText` — the key and its arguments, not a
-rendered string — and each sink asks for what it needs, `.Invariant()` for the log and
-`.Localized()` for the page. Nested `LocalizedText` arguments are rendered in their parent's
-language, so a message never comes out as a German sentence with an English clause inside it.
-
-Deferring the render has a second effect worth keeping: the detail already on the settings page
-re-renders when the display language changes, instead of showing the previous language until the
-next check happens to overwrite it. That is the same property `Strings` relies on, applied to text
-that is produced rather than declared.
-
-## The dashboard tile
-
-Without a tile the dashboard's plugin list falls back to a generic folder placeholder. Supplying one
-is opt-in through `MediaBrowser.Common.Plugins.IHasThumbImage`:
-
-```csharp
-Stream GetThumbImage();
-ImageFormat ThumbImageFormat { get; }   // MediaBrowser.Model.Drawing
-```
-
-Neither `BasePlugin` nor `BasePluginSimpleUI<T>` implements it — checked against the 4.9.5.0 metadata,
-they carry only `IPlugin`/`IPluginAssembly`, `IHasPluginConfiguration` and `IHasUIPages` — so `Plugin`
-declares the interface itself. `ImageFormat` accepts `Bmp | Gif | Jpg | Png | Webp | Avif`, and the
-declared value has to agree with the bytes actually handed back; nothing validates that at build time.
-
-`thumb.png` (640×360) is an embedded resource for the same reason as Harmony and the translations:
-installing stays a single file copy. Emby disposes the stream it is given, so `GetThumbImage` returns
-a fresh one per call rather than a cached instance. A missing resource yields `null`, which restores
-the placeholder instead of throwing — the tile is cosmetic and must not be able to break the plugin
-list.
+The honest limit: none of this proves the proxy forwards traffic. A SOCKS5 server that authenticates
+and then refuses every `CONNECT` still probes Ok. Establishing more means sending something through
+to a destination, and any destination shows that party the proxy's egress address and makes the
+verdict depend on its uptime. Reaching the proxy and being accepted by it is what can be established
+locally, so that is what is claimed and no more.
 
 ## The default bypass list
 
-RFC1918, loopback and link-local, plus Emby's own endpoints. The latter are not guesswork; they were
-read out of the 4.9.5.0 assemblies:
+Two constants, split by whether the user may switch them off.
 
-* `mb3admin.com` — `PluginSecurityManager`: `/admin/service/registration/validate` and
-  `/admin/service/appstore/register`; plus the plugin catalogue in `InstallationManager`
-  (`www.mb3admin.com/admin/service/package/...`).
-* `connect.emby.media` — `Emby.Server.Connect`: `https://connect.emby.media/service/`.
+`BypassRules.Always` is loopback only — `127.0.0.0/8`, `::1`, `localhost` — and is merged
+unconditionally. A proxy elsewhere has no route back to this machine, so a request to the server's
+own loopback address cannot succeed through it under any configuration; a switch for that would only
+have a wrong position and a right one. .NET's own `WebProxy` draws the line in the same place:
+`IsBypassed` returns true for a loopback host before it consults `BypassProxyOnLocal` or the bypass
+list.
 
-Sending licence traffic through a proxy under a fail-closed policy risks breaking Emby Premiere
-activation, and obscuring licence identity is not what this plugin is for.
+`BypassRules.PrivateNetworks` — RFC1918, `169.254.0.0/16`, `fc00::/7`, `fe80::/10`, `*.local` — is
+merged only when `PluginOptions.BypassPrivateNetworks` is set, which by default it is not. The
+default is that everything goes through the proxy, which is the answer needing no qualification for
+a plugin whose job is to route outbound traffic. Switching it on is for a server that also talks to
+its own LAN and does not want that traffic crossing a remote proxy, or dying with it.
+
+The default has a cost worth naming: an unreachable proxy takes the LAN with it, so another Emby
+server, a DLNA endpoint or a local metadata cache becomes unreachable along with the internet.
+
+`Parse` takes the flag as a required parameter rather than an optional one, for the same reason the
+fixed entries are merged inside it: a caller that can omit the question is a caller that will
+eventually answer it by accident.
+
+Both constants are address ranges plus mDNS, and deliberately nothing else. A rule for dotless
+hostnames (`nas`, `router`) existed briefly and was removed: it was the only compiled-in rule
+matching on the *shape* of a name rather than on an allocated range, and shape is a weaker
+justification than it looks — a dotless name is unroutable on the public internet by convention,
+where the ranges are unroutable by allocation. Mixing the two made the fixed set harder to state
+than "these ranges, plus mDNS". Anyone reaching a NAS by short name writes `nas` in the bypass list,
+where an exact host entry matches it, and the decision stays visible in the configuration.
+
+A trailing dot is folded away before any matching, for the same reason the IPv4-mapped IPv6 form is:
+a destination must not change route because of how it happened to be spelled.
+
+So everything matched **by name** rather than by address range lives in the user's list, which
+applies on top of both constants and regardless of the switch. That is more than it sounds, because
+matching is literal and does no DNS: a LAN device addressed by a dotted name (`emby.lan`,
+`nas.home.arpa`, an own domain pointing at a 192.168 address) is a name, not an IP, so the CIDR
+rules never see it either.
+
+### This switch is not Radarr's "Bypass Proxy for Local Addresses"
+
+The names are similar and the coverage is almost disjoint, which is worth stating because the
+comparison comes up. Measured against .NET 8, `WebProxy(bypassOnLocal: true)` bypasses loopback,
+dotless hostnames, **the machine's own interface addresses** (whatever range they are in — a public
+address on the host's own NIC is bypassed) and hosts in the machine's own DNS suffix. It does *not*
+bypass `192.168.1.50`, `10.11.12.13`, `169.254.0.0/16`, `fc00::/7` or `*.local`.
+
+This plugin's switch governs exactly the set that one does not: RFC1918, link-local, ULA and mDNS.
+Loopback is unconditional here rather than part of the switch, and dotless names are not covered at
+all. Radarr passes `BypassLocalAddress` and `BypassListAsArray` to `WebProxy` together for the same
+reason both exist here: neither mechanism subsumes the other.
+
+**Emby's own endpoints are deliberately not bypassed.** `mb3admin.com` (`PluginSecurityManager`:
+`/admin/service/registration/validate`, `/admin/service/appstore/register`, and the plugin catalogue
+in `InstallationManager`) and `connect.emby.media` (`Emby.Server.Connect`) were compiled-in entries
+until they were removed on purpose. Two reasons: a server whose only route outward *is* the proxy
+could not reach them at all, and the privacy argument for the bypass was thin, since a licence check
+carries the key that identifies the installation either way.
+
+The accepted cost is that a dead proxy also stops Premiere from validating, and
+that Emby's licensing servers see the proxy's egress address. A user who wants the old behaviour can
+put the hosts in the bypass list; the plugin no longer decides it for them.
 
 ## Building
 
@@ -269,6 +264,29 @@ For a different Emby version:
 ```bash
 FORCE=1 ./build/fetch-emby-refs.sh 4.9.6.0
 ```
+
+#### The checksum pin
+
+`build/emby-sha256.txt` holds the SHA-256 of the package the pinned version resolves to, and the
+fetch script **refuses to extract** the pinned version unless it matches — nothing is written to
+`lib/` on a mismatch. This download decides what ships: the release DLL is compiled against the
+assemblies inside it, and `verify-patch-target.sh` reads its patch target out of the same file.
+
+Be precise about what this does and does not buy. HTTPS authenticates the host; it says nothing
+about the artefact still being the one this repository was verified against. The checksum closes
+that second gap and nothing else — it is tamper-evidence for later fetches, not authentication of
+the upstream release. The value is first recorded at the moment a version is adopted, and it lands
+in a pull request a human merges, which is where trusting it is actually decided.
+
+Only the pinned version can be checked, because only it has an entry. `ci.yml` dispatches the script
+against *newer* Emby releases to see whether they still work, and those have no checksum by
+definition; such a run says so and carries on, which is the case it exists for. It also never
+publishes. `release.yml` takes no version input at all, so a release always goes through the
+verified path.
+
+**The two files are one pin.** Bumping the version without the checksum leaves a pin that cannot be
+built — the script fails rather than extracting something unverified. The bump pull request `ci.yml`
+opens writes both.
 
 ### Verifying the patch target
 
@@ -461,8 +479,9 @@ dashboard requests, and `classification` is emitted as `"Release"` because the c
 Two consequences worth weighing before pursuing this. The update task is unconditional, so accepting a
 catalog entry means the plugin replaces its own binary on a schedule, driven by a record held by a
 third party — for a plugin whose purpose is control over outbound traffic, that is a real trust
-surface. And `mb3admin.com` is in `BypassRules.Always`, so the update check deliberately does *not*
-go through the proxy and keeps working under fail-closed.
+surface. And `mb3admin.com` is no longer in `BypassRules.Always`, so the update check would go
+through the proxy like any other request — and would fail whenever the proxy is down, which is one
+more way for a self-updating plugin to behave unpredictably.
 
 ## Project layout
 
@@ -476,7 +495,8 @@ go through the proxy and keeps working under fail-closed.
 ARCHITECTURE.md                     This file
 CONTRIBUTING.md                     How to build, verify and submit a change
 build/emby-version.txt              The pinned Emby version (single source of truth)
-build/fetch-emby-refs.sh            Fetches the Emby assemblies
+build/emby-sha256.txt               SHA-256 of the pinned version's package; the other half of the pin
+build/fetch-emby-refs.sh            Fetches the Emby assemblies, verifying that checksum
 build/verify-patch-target.sh        Asserts the patched method still matches
 build/verify-single-dll.sh          Asserts the output is still one self-contained file
 build/catalog-entry.sh              Generates the package entry for Emby's plugin catalog
@@ -497,9 +517,9 @@ src/EmbyProxyRouter/
   Proxy/ProxySettings.cs      Immutable configuration snapshot
   Proxy/ProxyState.cs         Routing decision, in one place
   Proxy/DynamicWebProxy.cs    IWebProxy, consulted per request
-  Proxy/ProxyGateHandler.cs   Fail-closed enforcement and logging
+  Proxy/ProxyGateHandler.cs   Refuses requests with no usable proxy, and logs them
   Proxy/LogThrottle.cs        Collapses a repeated warning to one line per key per window
-  Proxy/ProxyHealthChecker.cs Reachability checking
+  Proxy/ProxyProbe.cs         The settings-page check (no timer, no third party)
   Proxy/ProxyRuntime.cs       Holds the singletons together
 tests/EmbyProxyRouter.Tests/
   Fakes.cs                    Recording logger and stub inner handler
@@ -507,7 +527,7 @@ tests/EmbyProxyRouter.Tests/
   BypassRulesTests.cs         Compiled-in entries, wildcards, CIDR, IPv4-mapped IPv6
   ProxyStateTests.cs          The routing matrix and snapshot handling
   DynamicWebProxyTests.cs     What the resolver answers for each verdict
-  ProxyGateHandlerTests.cs    Fail-closed enforcement, redaction, throttling
+  ProxyGateHandlerTests.cs    Blocking, redaction, throttling
   LogThrottleTests.cs         Windowing, suppressed counts, capacity behaviour
   ProxySettingsTests.cs       Interval clamps, check-URL assembly
   CertificatePolicyTests.cs   Scope of "ignore certificate validation"

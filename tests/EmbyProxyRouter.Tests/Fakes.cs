@@ -19,10 +19,16 @@ namespace EmbyProxyRouter.Tests
     internal sealed class RecordingLogger : ILogger
     {
         private readonly List<string> _warnings = new List<string>();
+        private readonly List<string> _errors = new List<string>();
 
         public IReadOnlyList<string> Warnings
         {
             get { return _warnings; }
+        }
+
+        public IReadOnlyList<string> Errors
+        {
+            get { return _errors; }
         }
 
         public void Warn(string message, params object[] paramList)
@@ -36,6 +42,7 @@ namespace EmbyProxyRouter.Tests
 
         public void Error(string message, params object[] paramList)
         {
+            _errors.Add(Render(message, paramList));
         }
 
         public void Debug(string message, params object[] paramList)
@@ -108,7 +115,7 @@ namespace EmbyProxyRouter.Tests
     /// Stands in for the real SocketsHttpHandler at the bottom of the gate's pipeline.
     /// </summary>
     /// <remarks>
-    /// Records whether it was reached at all, which is the whole question for a fail-closed test: a
+    /// Records whether it was reached at all, which is the whole question for a blocking test: a
     /// blocked request must never arrive here, and one the gate allows must.
     /// </remarks>
     internal sealed class StubHandler : HttpMessageHandler

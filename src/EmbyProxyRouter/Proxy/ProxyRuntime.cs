@@ -1,4 +1,3 @@
-using System;
 using System.Threading;
 using MediaBrowser.Model.Logging;
 
@@ -19,8 +18,6 @@ namespace EmbyProxyRouter.Proxy
 
         public static DynamicWebProxy Proxy { get; private set; }
 
-        public static ProxyHealthChecker HealthChecker { get; private set; }
-
         public static ILogger Logger { get; private set; }
 
         public static void Initialize(ILogger logger)
@@ -33,11 +30,10 @@ namespace EmbyProxyRouter.Proxy
             Logger = logger;
             State = new ProxyState();
             Proxy = new DynamicWebProxy(State);
-            HealthChecker = new ProxyHealthChecker(State, logger);
         }
 
         /// <summary>
-        /// Applies saved options and forces a fresh reachability check.
+        /// Applies saved options and states the resulting policy in the log.
         /// </summary>
         public static void ApplyOptions(PluginOptions options)
         {
@@ -49,31 +45,30 @@ namespace EmbyProxyRouter.Proxy
             var settings = ProxySettings.FromOptions(options);
             State.Apply(settings);
 
-            if (Logger != null)
+            if (Logger == null)
             {
-                if (!settings.Enabled)
-                {
-                    Logger.Info("Proxy Router: disabled - Emby connects directly.");
-                }
-                else if (settings.Endpoint == null)
-                {
-                    Logger.Error("Proxy Router: enabled, but the configuration is invalid - " +
-                                 (settings.ConfigError != null ? settings.ConfigError.Invariant() : "unknown error") +
-                                 (settings.FailOpen
-                                     ? " | Fail-open: requests will go out directly."
-                                     : " | Fail-closed: affected requests will be blocked."));
-                }
-                else
-                {
-                    Logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe().Invariant() +
-                                (settings.FailOpen ? " | fail-open" : " | fail-closed") +
-                                " | check interval " + (int)settings.HealthCheckInterval.TotalSeconds + " s");
-                }
+                return;
             }
 
-            if (HealthChecker != null)
+            if (!settings.Enabled)
             {
-                HealthChecker.Reschedule();
+                Logger.Info("Proxy Router: disabled - Emby connects directly.");
+            }
+            else if (settings.Endpoint == null)
+            {
+                Logger.Error("Proxy Router: enabled, but the configuration is invalid - " +
+                             (settings.ConfigError != null ? settings.ConfigError.Invariant() : "unknown error") +
+                             " | affected requests will be blocked.");
+            }
+            else
+            {
+                Logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe().Invariant() +
+                            // Stated on every apply because it is not visible from the routing
+                            // decisions themselves, and it decides whether a dead proxy also costs
+                            // the server its own LAN.
+                            (settings.Bypass.BypassPrivateNetworks
+                                ? " | private networks bypassed"
+                                : " | private networks proxied"));
             }
         }
     }

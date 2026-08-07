@@ -1,8 +1,8 @@
 # Emby Proxy Router
 
 A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) traffic that the
-**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5** —
-while always contacting private networks and Emby's licensing servers directly.
+**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5**.
+Everything goes through it; what does not is something you configure.
 
 ## What this plugin does
 
@@ -10,11 +10,12 @@ while always contacting private networks and Emby's licensing servers directly.
   remote image providers, subtitle downloads.
 * Supports **HTTP, HTTPS and SOCKS5 proxies**, selectable via dropdown or directly via URL scheme
   (`socks5://host:1080`).
-* Checks proxy reachability and shows the result in the dashboard.
-* **Fail-closed by default:** if the proxy is unreachable, affected requests are aborted and logged
-  rather than silently falling back to a direct connection. Fail-open is available as a deliberate
-  opt-in.
-* Always routes RFC1918, loopback, link-local and Emby's licensing/Connect servers directly.
+* Checks the proxy when you open or save the settings page, and shows the result there. The check
+  talks to the proxy and to nothing else.
+* **No fallback to a direct connection.** A configured proxy is used; if it cannot be reached, the
+  request fails.
+* Routes everything through the proxy by default, with a switch to keep RFC1918 and link-local
+  traffic off it. Loopback is never proxied.
 
 ## What this plugin explicitly does NOT do
 
@@ -25,8 +26,8 @@ This is intentional — the point of the project is a single, auditable responsi
 * **No** system-wide proxy configuration. Only Emby's own HTTP stack is redirected; `ffmpeg`, DLNA,
   client connections and everything else are untouched.
 * **No** proxying of inbound connections. Reverse-proxy operation is a different problem.
-* **No** circumvention of Emby's licence check. The licensing servers are on the bypass list on
-  purpose.
+* **No** circumvention of Emby's licence check. Licence traffic goes through the proxy like
+  everything else; the plugin neither blocks it nor rewrites it.
 
 ## Installation
 
@@ -43,13 +44,12 @@ in [ARCHITECTURE.md](ARCHITECTURE.md#building).
 The settings page shows a **Patch status** line at the top. "Active" is the state you want. "NOT
 active" means **no** traffic is being redirected, and the reason is stated right next to it. A third
 state, "Active, but …", means the patch is running while at least one HTTP handler could not be
-given the proxy — under fail-closed those requests are still blocked rather than leaking, but they
+given the proxy — those requests are blocked rather than leaking, but they
 are not being routed either, and a server restart usually clears it. In the server log:
 
 ```
 Harmony patch active on HttpMessageHandler ApplicationHost.CreateHttpClientHandler(HttpMessageHandlerOptions) (Emby.Server.Implementations 4.9.5.0).
-Proxy Router: enabled - socks5://192.168.1.10:1080 (auth as user) | fail-closed | check interval 60 s
-Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as user) succeeded (...)
+Proxy Router: enabled - socks5://192.168.1.10:1080 (auth as user) | private networks bypassed
 ```
 
 ## Configuration
@@ -59,65 +59,85 @@ Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as use
 | **Enable proxy** | Off = Emby behaves as if the plugin were not installed. |
 | **Proxy scheme** | `Http`, `Https` or `Socks5`. Only used when the address carries no scheme of its own. |
 | **Proxy address** | `host:port` (e.g. `192.168.1.10:8080`) or a full URL (e.g. `socks5://192.168.1.10:1080`). A port is mandatory. |
-| **Username / Password** | Optional. Take precedence over credentials embedded in the URL. |
+| **Username / Password** | Optional. Take precedence over credentials embedded in the URL. Credentials *in* the address need the URL form (`http://user:password@host:port`); in the bare `host:port` form there is no scheme to attach them to and the address is rejected. |
 | **Ignore certificate validation** | For HTTPS proxies using a self-signed certificate. |
-| **Connect directly when the proxy is unavailable** | Off (default) = fail-closed. On = fail-open. |
-| **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Private and link-local networks are compiled in and always bypassed — see below. |
-| **Check URL (HTTP)** | Tests whether the proxy forwards plain HTTP. Must answer 2xx; redirects are not followed and therefore fail. Empty = skip. |
-| **Check URL (HTTPS)** | Tests whether the proxy opens a CONNECT tunnel — the path almost all Emby traffic takes. Both checks must succeed. Both fields empty = TCP check only. |
-| **Check interval** | Seconds between reachability checks. Between 10 and 3600; values outside that range are clamped, including ones edited straight into the options file. |
+| **Bypass proxy for private networks** | Off (default) = everything goes through the proxy, private networks included, so a dead proxy also cuts the server off from its own LAN. On = RFC1918, link-local, ULA and `*.local` go directly instead. Loopback is unaffected either way. |
+| **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Applies on top of the switch above, and still applies when it is off. |
 
-### Fail-closed vs. fail-open
+### What happens when the proxy is down
 
-**Fail-closed (default).** If the proxy is unreachable — or not yet checked, or misconfigured —
-affected requests fail, and every case is logged as a warning:
+Requests that would have used it fail. There is no fallback to a direct connection, and no setting
+to enable one. Metadata lookups will fail for as long as the proxy is gone.
 
-```
-WARN  Proxy unreachable - request blocked: https://api.themoviedb.org (proxy is unreachable). Fail-closed is active; ...
-```
-
-Metadata lookups will fail for as long as the proxy is gone. That is the price of guaranteeing that
-nothing slips past the proxy unnoticed.
-
-**Fail-open (opt-in).** Requests go out directly without the proxy — but **never silently**:
+One case is different: the proxy is switched **on** and its address does not parse. The plugin
+refuses those requests itself and says why:
 
 ```
-WARN  Fail-open active - request is going out DIRECTLY, without the proxy: https://api.themoviedb.org (proxy is unreachable)
+ERROR Request blocked, no usable proxy: https://api.themoviedb.org (proxy is enabled but misconfigured: Proxy address needs an explicit port.)
 ```
 
-The active policy is shown as its own status line at the top of the settings page.
-
-**Repeated warnings are collapsed, never dropped.** A library scan against a dead proxy would
-otherwise write one identical line per lookup and bury the first one. Each destination and reason is
-logged immediately the first time, then at most once a minute, with the number of occurrences left
-out stated on the next line:
+**Repeated messages are collapsed, never dropped.** Each destination is logged immediately the first
+time, then at most once a minute, with the number left out stated on the next line:
 
 ```
-WARN  Proxy unreachable - request blocked: https://api.themoviedb.org (proxy is unreachable). Fail-closed is active. [+2417 identical in the last 60 s]
+ERROR Request blocked, no usable proxy: https://api.themoviedb.org (...) [+2417 identical in the last 60 s]
 ```
 
 This affects the log only. Every blocked request is still blocked, and still fails with its own
 message.
 
-### What is always bypassed
+### Checking the proxy
 
-These are compiled into the plugin and applied on top of whatever the bypass list contains. They
-cannot be removed from the settings page:
+Opening or saving the settings page runs one check and shows the result. There is no timer and no
+periodic check.
+
+The check talks to the proxy and to nothing else. For SOCKS5 it completes the handshake and, if you
+configured a username, the authentication — so it catches a wrong password, and it warns when the
+proxy accepts you without the credentials you supplied, which otherwise leaves a configuration that
+looks authenticated and is not. For an HTTPS proxy it completes the TLS handshake. For a plain HTTP
+proxy it establishes that something accepts connections on that port, and claims no more.
+
+There is no check URL to configure: the check stops before the point where the proxy would connect
+somewhere on your behalf. It therefore cannot prove the proxy forwards traffic — see Known
+limitations.
+
+### What bypasses the proxy
+
+**Never proxied, not switchable:**
 
 ```
-10.0.0.0/8   172.16.0.0/12   192.168.0.0/16   127.0.0.0/8   169.254.0.0/16
-::1          fc00::/7        fe80::/10        localhost     *.local
-mb3admin.com   *.mb3admin.com   connect.emby.media
+127.0.0.0/8   ::1   localhost
 ```
 
-Sending LAN traffic through a remote proxy is never the intent, and under fail-closed an unreachable
-proxy would otherwise cut the server off from its own network. The Emby hosts are fixed for a
-different reason: routing licence traffic through a proxy risks breaking Emby Premiere activation,
-and that is not a consequence anyone should run into by editing a text box. The bypass list on the
-settings page is therefore purely *additional* — it starts empty.
+A proxy elsewhere has no route back to this machine, so these cannot succeed through one.
 
-The trade-off is accepted deliberately: on a server whose only route outward is the proxy, these
-hosts become unreachable rather than proxied.
+**Bypassed only when "Bypass proxy for private networks" is switched on — it is off by default:**
+
+```
+10.0.0.0/8   172.16.0.0/12   192.168.0.0/16   169.254.0.0/16
+fc00::/7     fe80::/10       *.local
+```
+
+A trailing dot is ignored throughout, so `emby.local.` is `emby.local`.
+
+Switch it on when the server also talks to its own LAN — another Emby server, a DLNA endpoint, a
+local metadata cache — and you do not want that traffic crossing a remote proxy, or dying with it.
+Left off, an unreachable proxy costs you those alongside the internet.
+
+**Everything matched by name rather than by address range goes in the bypass list.** Matching is
+**literal, with no DNS resolution** (see Known limitations), so a LAN device addressed by a name is
+covered by none of the above — it is a name, not an IP:
+
+* dotted names pointing at a LAN address — `emby.lan`, `nas.home.arpa`, `nas.fritz.box`, or your own
+  domain on a 192.168 address
+* short names with no dot at all — `nas`, `router`. These are **not** bypassed on their own: the
+  compiled-in rules match allocated address ranges, never the shape of a name. Write `nas` in the
+  list and it is matched exactly.
+
+The list is *additional* — it starts empty, and it keeps working when the switch is off.
+
+**Emby's own licensing and Connect hosts are not bypassed.** `mb3admin.com` and
+`connect.emby.media` go through the proxy like every other destination — see Known limitations.
 
 Log messages deliberately contain only scheme, host and port — never the path. Paths and query
 strings of metadata lookups carry title information and frequently API keys.
@@ -129,10 +149,7 @@ in the plugin**, and a change takes effect without a restart. Translations are e
 there are no loose files to deploy. A language the plugin does not ship shows English, and an
 incomplete translation falls back to English per string rather than showing blank labels.
 
-**The server log stays English regardless.** Only the dashboard is translated. A log line is usually
-read by whoever is debugging the server rather than by whoever picked the language, and often away
-from the machine — in an issue, or searched for a phrase from this README — so translating it would
-only make it harder to search and harder to pass on.
+**The server log stays English regardless.** Only the dashboard is translated.
 
 Adding a language is a single file: copy `src/EmbyProxyRouter/Localization/en.json` to `<code>.json`
 using the code Emby uses (`fr`, `zh-CN`, `pt-BR`, …), translate the values, leave the keys untouched
@@ -141,30 +158,26 @@ English. Pull requests with translations are welcome — see [CONTRIBUTING.md](C
 
 ## Known limitations
 
-* **Live TV is only partially covered.** `Emby.LiveTV.dll` uses both the central `IHttpClient`
-  (which is redirected) and its own handler instances (which are **not**). If you use Live TV, do not
-  assume that traffic goes through the proxy in full. Special handling for it is deliberately not
-  built in.
-* **The bypass list performs no DNS resolution.** Hostnames are matched literally and IP rules only
-  apply to IP literals. Resolving would emit a DNS lookup for every request — exactly the visibility
-  the plugin exists to avoid.
+* **Live TV is only partially covered.** Some of its traffic uses HTTP handlers the plugin does not
+  reach, so do not assume Live TV goes through the proxy in full.
+* **The bypass list performs no DNS resolution.** Hostnames are matched literally, and IP rules only
+  apply to IP literals.
 * **HTTP(S) proxy authentication is reactive.** .NET sends credentials only after the proxy answers
-  `407`, not pre-emptively. Proxies that reject outright without issuing a challenge will not work.
-* **"Ignore certificate validation" is broad.** The option only takes effect while the proxy is
-  enabled and its address is valid — with the plugin switched off, Emby's TLS behaviour is left
-  exactly as it was found. But while it is in effect it covers *every* outbound connection the Emby
-  core makes: the proxy itself, the destinations tunnelled through it, and the destinations that go
-  out directly because they are on the bypass list — Emby's licensing hosts among them. A
-  certificate callback is handed the TLS handshake, not the request that triggered it, so the plugin
-  cannot narrow this any further. Only enable it when the proxy uses a self-signed certificate.
+  `407`. A proxy that rejects outright without issuing a challenge will not work.
+* **The settings-page check cannot prove the proxy forwards traffic.** It establishes that the proxy
+  answers, and for SOCKS5 that it accepts your credentials. One that authenticates and then refuses
+  every request still shows as working.
+* **"Ignore certificate validation" is broad.** While in effect it covers *every* outbound connection
+  the Emby core makes — not only the proxy, but the destinations tunnelled through it and those on
+  the bypass list. Only enable it when the proxy uses a self-signed certificate.
 * **Credentials are stored in plain text.** Emby persists plugin options as JSON under
   `/config/plugins/configurations/`. The password field is masked in the UI, not in the file.
 * **Bound to an internal Emby method.** The patched method is not public API, so an Emby update can
-  change it at any time. The plugin verifies the signature at startup and reports a mismatch loudly
-  instead of silently doing nothing — but it cannot repair one.
-* **Requests before the first health check.** Under fail-closed, requests are blocked until the
-  first check completes. That is intended: unconfirmed proxy availability is not a reason to let
-  traffic through.
+  change it. The plugin verifies it at startup and reports a mismatch, but cannot repair one.
+* **Emby Premiere validation depends on the proxy.** Licence traffic goes through it, so an
+  unreachable proxy stops Premiere validating, and Emby's licensing servers see the proxy's egress
+  address. Put `mb3admin.com`, `*.mb3admin.com` and `connect.emby.media` in the bypass list if that
+  is not what you want.
 
 ## Further reading
 

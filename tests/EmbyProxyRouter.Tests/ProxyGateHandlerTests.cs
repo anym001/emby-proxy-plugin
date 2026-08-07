@@ -3,40 +3,34 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Proxy;
 using Xunit;
 
 namespace EmbyProxyRouter.Tests
 {
     /// <summary>
-    /// The gate is where fail-closed is actually enforced — an IWebProxy cannot refuse a request,
-    /// it can only name a proxy or return null, and null means "connect directly".
+    /// The gate blocks exactly one thing, and it is the one an IWebProxy cannot express.
     /// </summary>
+    /// <remarks>
+    /// A resolver can name a proxy or return null, and null means "connect directly". For every
+    /// destination with a usable proxy URI that is enough — .NET reaches the proxy or fails, and it
+    /// never falls back. The exception is a proxy that is switched on with an address that does not
+    /// parse: there is no URI to name, so without a handler that can refuse, those requests would go
+    /// out in the clear.
+    /// </remarks>
     public class ProxyGateHandlerTests
     {
-        private static ProxySettings Settings(
-            bool enabled = true, string address = "socks5://proxy.example.com:1080",
-            bool failOpen = false)
-        {
-            return ProxySettings.FromOptions(new PluginOptions
-            {
-                EnableProxy = enabled,
-                ProxyAddress = address,
-                AllowDirectWhenProxyUnavailable = failOpen
-            });
-        }
+        private const string Destination = "https://api.themoviedb.org/3/movie/1?api_key=SECRET";
 
-        private static ProxyState StateWith(ProxySettings settings, ProxyHealth health)
+        private static ProxyState StateWith(
+            bool enabled = true, string address = "socks5://proxy.example.com:1080")
         {
             var state = new ProxyState();
-            state.Apply(settings);
-
-            if (health != ProxyHealth.Unknown)
+            state.Apply(ProxySettings.FromOptions(new PluginOptions
             {
-                state.SetHealth(health, LocalizedText.Of("HealthTcpOnlyOk"));
-            }
-
+                EnableProxy = enabled,
+                ProxyAddress = address
+            }));
             return state;
         }
 
@@ -56,246 +50,146 @@ namespace EmbyProxyRouter.Tests
             }
         }
 
-        // --- Fail-closed ------------------------------------------------------------------------
+        // --- The one blocked case ----------------------------------------------------------------
 
         /// <summary>
         /// The request must not reach the inner handler at all. Anything else is a leak.
         /// </summary>
         [Fact]
-        public async Task ABlockedRequestNeverReachesTheInnerHandler()
+        public async Task AMisconfiguredProxyBlocksBeforeTheInnerHandler()
         {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
             var inner = new StubHandler();
             var logger = new RecordingLogger();
 
             using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, state, logger, null)))
+                       new ProxyGateHandler(inner, StateWith(address: "nonsense"), logger, null)))
             {
-                var error = await SendAsync(invoker, "https://api.themoviedb.org/3/movie/1");
+                var error = await SendAsync(invoker, Destination);
 
                 Assert.IsType<HttpRequestException>(error);
                 Assert.Equal(0, inner.Calls);
-                Assert.Single(logger.Warnings);
-            }
-        }
-
-        [Fact]
-        public async Task AnUncheckedProxyBlocksToo()
-        {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unknown);
-            var inner = new StubHandler();
-
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, state, new RecordingLogger(), null)))
-            {
-                Assert.NotNull(await SendAsync(invoker, "https://api.themoviedb.org/"));
-                Assert.Equal(0, inner.Calls);
+                Assert.Single(logger.Errors);
             }
         }
 
         /// <summary>
-        /// The failure message reaches the caller, so it must name the destination without leaking
-        /// the path or query — metadata lookups carry title information and API keys.
+        /// The caller is told why, because a socket error from somewhere inside Emby would not say.
         /// </summary>
         [Fact]
-        public async Task TheBlockMessageNamesTheHostButNotThePath()
+        public async Task ABlockedRequestCarriesTheReason()
         {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
-            var logger = new RecordingLogger();
-
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(new StubHandler(), state, logger, null)))
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       new StubHandler(), StateWith(address: "nonsense"), new RecordingLogger(), null)))
             {
-                var error = await SendAsync(
-                    invoker, "https://api.themoviedb.org/3/movie/550?api_key=SECRET&title=Fight+Club");
-
-                Assert.Contains("api.themoviedb.org", error.Message);
-                Assert.DoesNotContain("SECRET", error.Message);
-                Assert.DoesNotContain("api_key", error.Message);
-                Assert.DoesNotContain("Fight", error.Message);
-
-                Assert.DoesNotContain("SECRET", logger.Warnings.Single());
-                Assert.DoesNotContain("/3/movie", logger.Warnings.Single());
+                var error = await SendAsync(invoker, Destination);
+                Assert.Contains("misconfigured", error.Message, StringComparison.OrdinalIgnoreCase);
             }
         }
 
-        // --- Fail-open --------------------------------------------------------------------------
+        // --- Everything else passes through ------------------------------------------------------
 
-        /// <summary>
-        /// Fail-open lets the request out — but never silently. The warning is the whole point of
-        /// the option being tolerable at all.
-        /// </summary>
-        [Fact]
-        public async Task FailOpenLetsTheRequestThroughAndSaysSo()
+        [Theory]
+        [InlineData(true, "socks5://proxy.example.com:1080", Destination)]   // routed via the proxy
+        [InlineData(true, "socks5://proxy.example.com:1080", "http://192.168.1.50:8096/")] // bypassed
+        [InlineData(false, "socks5://proxy.example.com:1080", Destination)]  // plugin switched off
+        public async Task EverythingElseReachesTheInnerHandler(bool enabled, string address, string url)
         {
-            var settings = Settings(failOpen: true);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
             var inner = new StubHandler();
             var logger = new RecordingLogger();
 
             using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, state, logger, null)))
+                       new ProxyGateHandler(inner, StateWith(enabled, address), logger, null)))
             {
-                Assert.Null(await SendAsync(invoker, "https://api.themoviedb.org/"));
+                Assert.Null(await SendAsync(invoker, url));
                 Assert.Equal(1, inner.Calls);
-                Assert.Single(logger.Warnings);
-            }
-        }
 
-        // --- The quiet paths --------------------------------------------------------------------
-
-        [Fact]
-        public async Task AReachableProxyPassesTheRequestThroughWithoutAWarning()
-        {
-            var settings = Settings();
-            var state = StateWith(settings, ProxyHealth.Reachable);
-            var inner = new StubHandler();
-            var logger = new RecordingLogger();
-
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, state, logger, null)))
-            {
-                Assert.Null(await SendAsync(invoker, "https://api.themoviedb.org/"));
-                Assert.Equal(1, inner.Calls);
+                // A request going where it should is not an incident.
+                Assert.Empty(logger.Errors);
                 Assert.Empty(logger.Warnings);
             }
         }
 
         /// <summary>
-        /// A bypassed destination is expected behaviour, not an incident — warning on every LAN
-        /// request would make the warnings worthless.
+        /// A disabled plugin must not block even when its address is nonsense — the address is
+        /// irrelevant until the proxy is switched on.
         /// </summary>
         [Fact]
-        public async Task ABypassedDestinationIsNotWarnedAbout()
+        public async Task ADisabledPluginNeverBlocks()
         {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
             var inner = new StubHandler();
-            var logger = new RecordingLogger();
 
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, state, logger, null)))
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       inner, StateWith(enabled: false, address: "nonsense"), new RecordingLogger(), null)))
             {
-                Assert.Null(await SendAsync(invoker, "http://192.168.1.50:8096/"));
+                Assert.Null(await SendAsync(invoker, Destination));
                 Assert.Equal(1, inner.Calls);
-                Assert.Empty(logger.Warnings);
             }
         }
 
-        [Fact]
-        public async Task ADisabledPluginIsSilent()
-        {
-            var settings = Settings(enabled: false);
-            var state = StateWith(settings, ProxyHealth.Unknown);
-            var inner = new StubHandler();
-            var logger = new RecordingLogger();
-
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, state, logger, null)))
-            {
-                Assert.Null(await SendAsync(invoker, "https://api.themoviedb.org/"));
-                Assert.Equal(1, inner.Calls);
-                Assert.Empty(logger.Warnings);
-            }
-        }
-
-        // --- Throttling -------------------------------------------------------------------------
+        // --- What reaches the log ----------------------------------------------------------------
 
         /// <summary>
-        /// The scan case: thousands of blocked lookups must not become thousands of log lines — and
-        /// must still all be blocked.
+        /// Paths and query strings of metadata lookups carry title information and API keys.
         /// </summary>
         [Fact]
-        public async Task RepeatedBlocksCollapseInTheLogButNotInTheEnforcement()
+        public async Task TheLogCarriesSchemeHostAndPortOnly()
         {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
-            var inner = new StubHandler();
             var logger = new RecordingLogger();
-            var throttle = new LogThrottle(TimeSpan.FromMinutes(1));
 
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, state, logger, throttle)))
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       new StubHandler(), StateWith(address: "nonsense"), logger, null)))
             {
-                for (var i = 0; i < 200; i++)
+                var error = await SendAsync(invoker, Destination);
+
+                var line = logger.Errors.Single();
+                foreach (var text in new[] { line, error.Message })
                 {
-                    var error = await SendAsync(
-                        invoker, "https://api.themoviedb.org/3/movie/" + i);
-
-                    // Every single one still fails, and still explains itself to its caller.
-                    Assert.IsType<HttpRequestException>(error);
-                    Assert.Contains("api.themoviedb.org", error.Message);
+                    Assert.Contains("https://api.themoviedb.org", text);
+                    Assert.DoesNotContain("SECRET", text);
+                    Assert.DoesNotContain("/3/movie/1", text);
                 }
-
-                Assert.Equal(0, inner.Calls);
-                Assert.Single(logger.Warnings);
             }
         }
 
         /// <summary>
-        /// Throttling is per destination, so a second host is reported even while the first is
-        /// inside its window.
+        /// A misconfigured proxy blocks every request, and a library scan issues thousands.
         /// </summary>
         [Fact]
-        public async Task ADifferentHostIsReportedImmediately()
+        public async Task RepeatedBlocksCollapseIntoOneLinePerWindow()
         {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
             var logger = new RecordingLogger();
             var throttle = new LogThrottle(TimeSpan.FromMinutes(1));
 
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(new StubHandler(), state, logger, throttle)))
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       new StubHandler(), StateWith(address: "nonsense"), logger, throttle)))
             {
-                await SendAsync(invoker, "https://api.themoviedb.org/a");
-                await SendAsync(invoker, "https://api.themoviedb.org/b");
-                await SendAsync(invoker, "https://image.tmdb.org/c");
-
-                Assert.Equal(2, logger.Warnings.Count);
-                Assert.Contains(logger.Warnings, w => w.Contains("api.themoviedb.org"));
-                Assert.Contains(logger.Warnings, w => w.Contains("image.tmdb.org"));
+                for (var i = 0; i < 20; i++)
+                {
+                    // Every one of them still fails - only the logging is collapsed.
+                    Assert.IsType<HttpRequestException>(await SendAsync(invoker, Destination));
+                }
             }
+
+            Assert.Single(logger.Errors);
         }
 
         /// <summary>
-        /// The same host on a different port is a different destination.
+        /// A different destination is a different event and is never suppressed by the first.
         /// </summary>
         [Fact]
-        public async Task ADifferentPortIsADifferentDestination()
+        public async Task ADifferentDestinationIsLoggedImmediately()
         {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
             var logger = new RecordingLogger();
             var throttle = new LogThrottle(TimeSpan.FromMinutes(1));
 
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(new StubHandler(), state, logger, throttle)))
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       new StubHandler(), StateWith(address: "nonsense"), logger, throttle)))
             {
-                await SendAsync(invoker, "https://example.com/a");
-                await SendAsync(invoker, "https://example.com:8443/a");
-
-                Assert.Equal(2, logger.Warnings.Count);
+                await SendAsync(invoker, Destination);
+                await SendAsync(invoker, "https://image.tmdb.org/t/p/w500/x.jpg");
             }
-        }
 
-        [Fact]
-        public async Task WithoutAThrottleEveryBlockIsLogged()
-        {
-            var settings = Settings(failOpen: false);
-            var state = StateWith(settings, ProxyHealth.Unreachable);
-            var logger = new RecordingLogger();
-
-            using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(new StubHandler(), state, logger, null)))
-            {
-                await SendAsync(invoker, "https://api.themoviedb.org/a");
-                await SendAsync(invoker, "https://api.themoviedb.org/b");
-
-                Assert.Equal(2, logger.Warnings.Count);
-            }
+            Assert.Equal(2, logger.Errors.Count);
         }
     }
 }
