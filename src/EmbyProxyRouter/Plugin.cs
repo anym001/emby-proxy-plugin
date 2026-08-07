@@ -255,7 +255,9 @@ namespace EmbyProxyRouter
                 return;
             }
 
-            var detail = state.LastCheckDetail ?? Localizer.Get("NotCheckedYet");
+            var detail = state.LastCheckDetail != null
+                ? state.LastCheckDetail.Localized()
+                : Localizer.Get("NotCheckedYet");
             var age = state.LastCheckUtc.HasValue
                 ? Localizer.Format(
                     "AgeSuffix",

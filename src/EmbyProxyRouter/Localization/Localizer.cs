@@ -96,10 +96,41 @@ namespace EmbyProxyRouter.Localization
             return key;
         }
 
+        /// <summary>
+        /// Returns the string for <paramref name="key"/> in English, whatever the display language.
+        /// </summary>
+        /// <remarks>
+        /// The log channel. A log line is read by whoever is debugging the server — often not the
+        /// person whose dashboard language is set, and frequently after the fact, pasted into an
+        /// issue or grepped for a phrase from the documentation. Translating it makes it harder to
+        /// search and harder to hand to someone else, so anything written to the Emby log resolves
+        /// through here and never through <see cref="Get"/>.
+        /// </remarks>
+        public static string GetInvariant(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return string.Empty;
+            }
+
+            string value;
+            return Load(FallbackCode).TryGetValue(key, out value) ? value : key;
+        }
+
         /// <summary>Returns the string for <paramref name="key"/> with positional arguments applied.</summary>
         public static string Format(string key, params object[] args)
         {
-            var template = Get(key);
+            return Apply(Get(key), args);
+        }
+
+        /// <summary>The English counterpart of <see cref="Format"/>. See <see cref="GetInvariant"/>.</summary>
+        public static string FormatInvariant(string key, params object[] args)
+        {
+            return Apply(GetInvariant(key), args);
+        }
+
+        private static string Apply(string template, object[] args)
+        {
             if (args == null || args.Length == 0)
             {
                 return template;

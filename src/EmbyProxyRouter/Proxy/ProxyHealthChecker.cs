@@ -133,14 +133,14 @@ namespace EmbyProxyRouter.Proxy
 
                 if (!settings.Enabled)
                 {
-                    Update(ProxyHealth.Unknown, Localizer.Get("HealthProxyDisabled"));
+                    Update(ProxyHealth.Unknown, LocalizedText.Of("HealthProxyDisabled"));
                     return ProxyHealth.Unknown;
                 }
 
                 if (settings.Endpoint == null)
                 {
                     Update(ProxyHealth.Unreachable,
-                        settings.ConfigError ?? Localizer.Get("HealthAddressInvalid"));
+                        settings.ConfigError ?? LocalizedText.Of("HealthAddressInvalid"));
                     return ProxyHealth.Unreachable;
                 }
 
@@ -156,7 +156,7 @@ namespace EmbyProxyRouter.Proxy
                 if (settings.HealthCheckUrls.Count == 0)
                 {
                     // TCP reachability is all we were asked to verify.
-                    Update(ProxyHealth.Reachable, Localizer.Get("HealthTcpOnlyOk"));
+                    Update(ProxyHealth.Reachable, LocalizedText.Of("HealthTcpOnlyOk"));
                     return ProxyHealth.Reachable;
                 }
 
@@ -171,20 +171,20 @@ namespace EmbyProxyRouter.Proxy
                     {
                         // Stop at the first failure. The verdict cannot change any more, and probing
                         // on would only add one HTTP timeout per remaining URL to every failed cycle.
-                        Update(ProxyHealth.Unreachable, Localizer.Format("HealthUrlRequired", probe.Error));
+                        Update(ProxyHealth.Unreachable, LocalizedText.Of("HealthUrlRequired", probe.Error));
                         return ProxyHealth.Unreachable;
                     }
 
                     totalMs += probe.ElapsedMs;
                 }
 
-                Update(ProxyHealth.Reachable, Localizer.Format(
+                Update(ProxyHealth.Reachable, LocalizedText.Of(
                     "HealthAllHttpOk", settings.HealthCheckUrls.Count, endpoint.Describe(), totalMs));
                 return ProxyHealth.Reachable;
             }
             catch (Exception ex)
             {
-                Update(ProxyHealth.Unreachable, Localizer.Format("HealthCheckFailed", ex.Message));
+                Update(ProxyHealth.Unreachable, LocalizedText.Of("HealthCheckFailed", ex.Message));
                 return ProxyHealth.Unreachable;
             }
             finally
@@ -194,7 +194,7 @@ namespace EmbyProxyRouter.Proxy
         }
 
         /// <summary>Returns null on success, or a description of the failure.</summary>
-        private async Task<string> CheckTcpAsync(ProxyEndpoint endpoint, CancellationToken cancellationToken)
+        private async Task<LocalizedText> CheckTcpAsync(ProxyEndpoint endpoint, CancellationToken cancellationToken)
         {
             try
             {
@@ -209,22 +209,22 @@ namespace EmbyProxyRouter.Proxy
             }
             catch (OperationCanceledException)
             {
-                return Localizer.Format(
+                return LocalizedText.Of(
                     "HealthTcpTimeout", endpoint.Host, endpoint.Port, TcpTimeout.TotalSeconds);
             }
             catch (Exception ex)
             {
-                return Localizer.Format("HealthTcpFailed", endpoint.Host, endpoint.Port, ex.Message);
+                return LocalizedText.Of("HealthTcpFailed", endpoint.Host, endpoint.Port, ex.Message);
             }
         }
 
         private struct ProbeResult
         {
             public bool Success;
-            public string Error;
+            public LocalizedText Error;
             public long ElapsedMs;
 
-            public static ProbeResult Failed(string error)
+            public static ProbeResult Failed(LocalizedText error)
             {
                 return new ProbeResult { Success = false, Error = error };
             }
@@ -236,7 +236,7 @@ namespace EmbyProxyRouter.Proxy
             Uri target;
             if (!Uri.TryCreate(url, UriKind.Absolute, out target))
             {
-                return ProbeResult.Failed(Localizer.Format("HealthInvalidUrl", url));
+                return ProbeResult.Failed(LocalizedText.Of("HealthInvalidUrl", url));
             }
 
             var started = DateTime.UtcNow;
@@ -256,7 +256,7 @@ namespace EmbyProxyRouter.Proxy
                         var elapsed = (long)(DateTime.UtcNow - started).TotalMilliseconds;
                         if (!response.IsSuccessStatusCode)
                         {
-                            return ProbeResult.Failed(Localizer.Format(
+                            return ProbeResult.Failed(LocalizedText.Of(
                                 "HealthHttpStatus", url, (int)response.StatusCode));
                         }
 
@@ -266,7 +266,7 @@ namespace EmbyProxyRouter.Proxy
             }
             catch (Exception ex)
             {
-                return ProbeResult.Failed(Localizer.Format("HealthUrlFailed", url, ex.GetBaseException().Message));
+                return ProbeResult.Failed(LocalizedText.Of("HealthUrlFailed", url, ex.GetBaseException().Message));
             }
         }
 
@@ -335,28 +335,28 @@ namespace EmbyProxyRouter.Proxy
             _probeSettings = null;
         }
 
-        private void Update(ProxyHealth health, string detail)
+        private void Update(ProxyHealth health, LocalizedText detail)
         {
             var changed = _state.SetHealth(health, detail);
             if (!changed)
             {
-                _logger.Debug("Proxy status unchanged: " + health + " - " + detail);
+                _logger.Debug("Proxy status unchanged: " + health + " - " + detail.Invariant());
                 return;
             }
 
             switch (health)
             {
                 case ProxyHealth.Reachable:
-                    _logger.Info("Proxy status: REACHABLE - " + detail);
+                    _logger.Info("Proxy status: REACHABLE - " + detail.Invariant());
                     break;
                 case ProxyHealth.Unreachable:
-                    _logger.Warn("Proxy status: UNREACHABLE - " + detail +
+                    _logger.Warn("Proxy status: UNREACHABLE - " + detail.Invariant() +
                                  (_state.Settings.FailOpen
                                      ? " | Fail-open: requests will go out directly."
                                      : " | Fail-closed: affected requests will be blocked."));
                     break;
                 default:
-                    _logger.Info("Proxy status: " + health + " - " + detail);
+                    _logger.Info("Proxy status: " + health + " - " + detail.Invariant());
                     break;
             }
         }

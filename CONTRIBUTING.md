@@ -54,8 +54,14 @@ silently routes nothing.
 ## Conventions
 
 - **English everywhere** — code, comments, YAML, documentation, commit messages, PR titles.
-- **User-visible strings are localized**, never hardcoded. A new string goes into `en.json` *and*
+- **User-visible strings are localized**, never hardcoded. A new UI string goes into `en.json` *and*
   every other language file.
+- **The Emby log stays English**, whatever the dashboard language is set to — a log line is usually
+  read by someone other than the person who set that language, and often out of context in an issue.
+  Log strings are prefixed `Log`, live in `en.json` only, and are resolved with
+  `Localizer.GetInvariant` / `FormatInvariant`. A value shown on the page *and* written to the log
+  is a `LocalizedText`, rendered `.Localized()` for one and `.Invariant()` for the other. Do not
+  translate a `Log*` key; the tests reject it.
 - **Log only scheme, host and port for request URLs.** Paths and query strings of Emby's metadata
   lookups carry title information and API keys.
 - Never commit `lib/*.dll` — they are proprietary Emby binaries — and never commit build output or

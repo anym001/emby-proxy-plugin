@@ -142,12 +142,24 @@ key by key.
   getter each read, which is the other half of what makes a live language change work.
 * Runtime strings (status text, validation errors, health-check detail) call `Localizer.Get` /
   `Localizer.Format` directly.
-* Adding a string: add the key to `en.json` **and** every other language file, then add a static
-  property to `Strings` only if an attribute needs it.
+* Adding a string: decide first which audience it has. A **UI** string goes into `en.json` **and**
+  every other language file, and gets a static property on `Strings` only if an attribute needs it.
+  A **log** string gets a `Log` prefix and goes into `en.json` alone.
 * Adding a language: drop in `<code>.json` using the culture code Emby uses (`fr`, `zh-CN`,
   `pt-BR`, …). Nothing else changes — no csproj entry, no C# change.
-* Log message *prefixes* stay English so log lines remain greppable, but embedded detail strings are
-  localized because they are also shown in the dashboard.
+* **The Emby log is English. Only the dashboard follows the display language.** A log line is read
+  by whoever is debugging the server — often not the person whose language is set, and usually after
+  the fact, pasted into an issue or grepped for a phrase out of the documentation. The rule is
+  mechanical so it can be checked rather than remembered:
+  * Keys written to the log are prefixed `Log` and live in **`en.json` only**. Resolve them with
+    `Localizer.GetInvariant` / `FormatInvariant`, never `Get` / `Format`. Do not translate them —
+    `LogLanguageTests` fails the build if a `Log*` key turns up in another language file.
+  * A value that reaches **both** audiences — the reachability detail, a proxy-address parse error,
+    the endpoint description — is carried as a `LocalizedText` rather than a rendered string, and
+    each sink asks for what it needs: `.Invariant()` for the log, `.Localized()` for the page.
+    Nested `LocalizedText` arguments follow their parent, so a rendered message is in one language
+    throughout.
+  * Everything else is a UI string and belongs in every language file, as before.
 
 ## Things that are easy to get wrong
 

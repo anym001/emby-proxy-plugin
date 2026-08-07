@@ -84,8 +84,8 @@ namespace EmbyProxyRouter.Proxy
                     // caller gets as the failure, and every blocked request is entitled to be told
                     // why it failed regardless of how many others failed the same way.
                     var target = Redact(uri);
-                    var message = Localizer.Format(
-                        "BlockedMessage", target, ProxyState.Explain(reason, settings));
+                    var message = Localizer.FormatInvariant(
+                        "LogBlocked", target, ProxyState.Explain(reason, settings));
 
                     int blockedSuppressed;
                     if (ShouldLog(decision, reason, target, out blockedSuppressed))
@@ -105,8 +105,8 @@ namespace EmbyProxyRouter.Proxy
                         int directSuppressed;
                         if (ShouldLog(decision, reason, directTarget, out directSuppressed))
                         {
-                            _logger.Warn(Localizer.Format(
-                                             "FailOpenMessage",
+                            _logger.Warn(Localizer.FormatInvariant(
+                                             "LogFailOpen",
                                              directTarget,
                                              ProxyState.Explain(reason, settings)) +
                                          SuppressedNote(directSuppressed));
@@ -147,8 +147,8 @@ namespace EmbyProxyRouter.Proxy
                 return string.Empty;
             }
 
-            return Localizer.Format(
-                "SuppressedSuffix", suppressed, (int)_throttle.Window.TotalSeconds);
+            return Localizer.FormatInvariant(
+                "LogSuppressed", suppressed, (int)_throttle.Window.TotalSeconds);
         }
 
         /// <summary>

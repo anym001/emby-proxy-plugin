@@ -145,10 +145,10 @@ namespace EmbyProxyRouter
             }
 
             ProxyEndpoint endpoint;
-            string error;
+            LocalizedText error;
             if (!ProxyEndpoint.TryParse(ProxyAddress, Scheme, Username, Password, out endpoint, out error))
             {
-                context.AddValidationError(nameof(ProxyAddress), error);
+                context.AddValidationError(nameof(ProxyAddress), error.Localized());
             }
 
             var rules = BypassRules.Parse(BypassList);

@@ -176,8 +176,34 @@ resolves through `LocalizableString`, which requires a **public static string pr
 getter**; it caches the reflected `PropertyInfo` but re-invokes the getter on every read, which is
 the other half of what makes a live language change work.
 
-Log message *prefixes* stay English so log lines remain greppable across installations, but embedded
-detail strings are localized, because the same text is shown in the dashboard.
+### The log is not localized
+
+The dashboard follows the display language; **the Emby log is always English.** A log line is read by
+whoever is debugging the server, which is often not the person whose language is set, and usually
+away from the machine — pasted into an issue, or grepped for a phrase taken from this documentation.
+Translating it costs both of those and buys nothing, since the person reading it did not choose the
+language it came out in.
+
+The split is mechanical rather than a matter of care, so it can be checked:
+
+* Keys written to the log are prefixed `Log` and exist in **`en.json` only**. They resolve through
+  `Localizer.GetInvariant` / `FormatInvariant`, which read the English table directly and ignore
+  `CurrentUICulture` entirely.
+* A translation that defines a `Log*` key fails the build. `LogLanguageTests` walks every embedded
+  language file and rejects one — the mistake it guards against is a well-meaning translator, and a
+  German sentence in the log is not something the compiler would otherwise notice.
+
+Some values genuinely have both audiences: the reachability detail is shown on the settings page and
+written to the log, and it quotes the endpoint description and the failing probe's error, which are
+in the same position. Those are carried as `LocalizedText` — the key and its arguments, not a
+rendered string — and each sink asks for what it needs, `.Invariant()` for the log and
+`.Localized()` for the page. Nested `LocalizedText` arguments are rendered in their parent's
+language, so a message never comes out as a German sentence with an English clause inside it.
+
+Deferring the render has a second effect worth keeping: the detail already on the settings page
+re-renders when the display language changes, instead of showing the previous language until the
+next check happens to overwrite it. That is the same property `Strings` relies on, applied to text
+that is produced rather than declared.
 
 ## The dashboard tile
 
@@ -461,7 +487,8 @@ src/EmbyProxyRouter/
   thumb.png                   Tile shown in the dashboard's plugin list (embedded)
   Localization/en.json        Reference language (every key must exist here)
   Localization/de.json        German translation
-  Localization/Localizer.cs   Language resolution and JSON lookup
+  Localization/Localizer.cs   Language resolution and JSON lookup (localized and English)
+  Localization/LocalizedText.cs Deferred message, for values shown on the page AND logged
   Localization/Strings.cs     Static properties consumed by Emby's localization attributes
   Patch/HarmonyLoader.cs      Loads the embedded Harmony assembly
   Patch/HttpHandlerPatch.cs   The postfix patch, including signature verification
@@ -484,4 +511,5 @@ tests/EmbyProxyRouter.Tests/
   LogThrottleTests.cs         Windowing, suppressed counts, capacity behaviour
   ProxySettingsTests.cs       Interval clamps, check-URL assembly
   CertificatePolicyTests.cs   Scope of "ignore certificate validation"
+  LogLanguageTests.cs         Enforces that the log is English and the page is not
 ```

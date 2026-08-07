@@ -1,5 +1,5 @@
 {
-  "_comment": "Reference language. Every key must exist here; other languages may omit keys and fall back to this file.",
+  "_comment": "Reference language. Every key must exist here; other languages may omit keys and fall back to this file. Keys prefixed 'Log' are written to the Emby log and are deliberately never translated - they must not appear in any other language file.",
   "_languageName": "English",
 
   "EditorTitle": "Proxy Router",
@@ -76,19 +76,19 @@
   "HealthHttpStatus": "{0} answered with HTTP {1}",
   "HealthUrlFailed": "{0} failed: {1}",
 
-  "ReasonDisabled": "proxy is disabled",
-  "ReasonMisconfigured": "proxy is enabled but misconfigured",
-  "ReasonBypassed": "destination is on the bypass list",
-  "ReasonReachable": "proxy is reachable",
-  "ReasonNotChecked": "proxy status has not been checked yet",
-  "ReasonUnreachable": "proxy is unreachable",
+  "LogReasonDisabled": "proxy is disabled",
+  "LogReasonMisconfigured": "proxy is enabled but misconfigured",
+  "LogReasonBypassed": "destination is on the bypass list",
+  "LogReasonReachable": "proxy is reachable",
+  "LogReasonNotChecked": "proxy status has not been checked yet",
+  "LogReasonUnreachable": "proxy is unreachable",
 
-  "BlockedMessage": "Proxy unreachable - request blocked: {0} ({1}). Fail-closed is active.",
-  "FailOpenMessage": "Fail-open active - request is going out DIRECTLY, without the proxy: {0} ({1})",
-  "SuppressedSuffix": " [+{0} identical in the last {1} s]",
+  "LogBlocked": "Proxy unreachable - request blocked: {0} ({1}). Fail-closed is active.",
+  "LogFailOpen": "Fail-open active - request is going out DIRECTLY, without the proxy: {0} ({1})",
+  "LogSuppressed": " [+{0} identical in the last {1} s]",
 
-  "AuthNone": "no auth",
-  "AuthAs": "auth as {0}",
+  "DescribeNoAuth": "{0} (no auth)",
+  "DescribeAuthAs": "{0} (auth as {1})",
 
   "ErrNoAddress": "No proxy address configured.",
   "ErrInvalidUrl": "Proxy address is not a valid URL: {0}",

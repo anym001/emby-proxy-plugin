@@ -129,9 +129,15 @@ in the plugin**, and a change takes effect without a restart. Translations are e
 there are no loose files to deploy. A language the plugin does not ship shows English, and an
 incomplete translation falls back to English per string rather than showing blank labels.
 
+**The server log stays English regardless.** Only the dashboard is translated. A log line is usually
+read by whoever is debugging the server rather than by whoever picked the language, and often away
+from the machine — in an issue, or searched for a phrase from this README — so translating it would
+only make it harder to search and harder to pass on.
+
 Adding a language is a single file: copy `src/EmbyProxyRouter/Localization/en.json` to `<code>.json`
 using the code Emby uses (`fr`, `zh-CN`, `pt-BR`, …), translate the values, leave the keys untouched
-and rebuild. Pull requests with translations are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+and rebuild. Leave out the keys prefixed `Log` — those are the log messages and are meant to stay
+English. Pull requests with translations are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Known limitations
 

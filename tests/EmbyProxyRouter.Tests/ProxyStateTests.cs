@@ -1,4 +1,5 @@
 using System;
+using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Proxy;
 using Xunit;
 
@@ -35,7 +36,7 @@ namespace EmbyProxyRouter.Tests
 
             if (health != ProxyHealth.Unknown)
             {
-                state.SetHealth(health, "test");
+                state.SetHealth(health, LocalizedText.Of("HealthTcpOnlyOk"));
             }
 
             return state;
@@ -149,7 +150,7 @@ namespace EmbyProxyRouter.Tests
         {
             var state = new ProxyState();
             state.Apply(Settings());
-            state.SetHealth(ProxyHealth.Reachable, "up");
+            state.SetHealth(ProxyHealth.Reachable, LocalizedText.Of("HealthTcpOnlyOk"));
 
             Assert.Equal(ProxyHealth.Reachable, state.Health);
 
@@ -166,9 +167,9 @@ namespace EmbyProxyRouter.Tests
             var state = new ProxyState();
             state.Apply(Settings());
 
-            Assert.True(state.SetHealth(ProxyHealth.Reachable, "first"));
-            Assert.False(state.SetHealth(ProxyHealth.Reachable, "same verdict, new detail"));
-            Assert.True(state.SetHealth(ProxyHealth.Unreachable, "changed"));
+            Assert.True(state.SetHealth(ProxyHealth.Reachable, LocalizedText.Of("HealthTcpOnlyOk")));
+            Assert.False(state.SetHealth(ProxyHealth.Reachable, LocalizedText.Of("HealthAllHttpOk", 2, "p", 5)));
+            Assert.True(state.SetHealth(ProxyHealth.Unreachable, LocalizedText.Of("HealthAddressInvalid")));
         }
 
         /// <summary>
@@ -182,10 +183,10 @@ namespace EmbyProxyRouter.Tests
             state.Apply(Settings());
 
             var before = DateTime.UtcNow.AddSeconds(-1);
-            state.SetHealth(ProxyHealth.Unreachable, "connection refused");
+            state.SetHealth(ProxyHealth.Unreachable, LocalizedText.Of("HealthTcpFailed", "p", 1080, "refused"));
 
             Assert.Equal(ProxyHealth.Unreachable, state.Health);
-            Assert.Equal("connection refused", state.LastCheckDetail);
+            Assert.Contains("refused", state.LastCheckDetail.Invariant());
             Assert.True(state.LastCheckUtc.HasValue);
             Assert.True(state.LastCheckUtc.Value > before);
         }
@@ -239,7 +240,7 @@ namespace EmbyProxyRouter.Tests
             var settings = Settings(address: "not a proxy at all");
             var text = ProxyState.Explain(RouteReason.Misconfigured, settings);
 
-            Assert.Contains(settings.ConfigError, text);
+            Assert.Contains(settings.ConfigError.Invariant(), text);
         }
 
         [Fact]
