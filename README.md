@@ -34,7 +34,6 @@ The Emby container usually maps a host directory to `/config`. Copy the plugin D
 `plugins` subfolder and restart the container.
 
 ```bash
-# On the Unraid host; adjust the path if needed:
 cp EmbyProxyRouter.dll /mnt/user/appdata/emby/plugins/
 
 docker restart emby
