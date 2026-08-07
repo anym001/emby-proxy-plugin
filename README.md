@@ -134,17 +134,17 @@ LAN device addressed by a name is covered by none of the above — it is a name,
 
 * dotted names pointing at a LAN address — `emby.lan`, `nas.home.arpa`, `nas.fritz.box`, or your own
   domain on a 192.168 address
-* short names with no dot at all — `nas`, `router`. These are **not** bypassed on their own. The
-  plugin deliberately has no compiled-in rule matching on the shape of a name; write `nas` in the
+* short names with no dot at all — `nas`, `router`. These are **not** bypassed on their own: the
+  compiled-in rules match allocated address ranges, never the shape of a name. Write `nas` in the
   list and it is matched exactly.
 
 The list is *additional* — it starts empty, and it keeps working when the switch is off.
 
-**Emby's own licensing and Connect hosts are not on this list.** They were once, and are not any
-more: `mb3admin.com` and `connect.emby.media` go through the proxy like every other destination.
-Bypassing them meant a server whose only route outward *is* the proxy could not reach them at all,
-and the privacy argument was thin — a licence check carries the key identifying the installation
-either way, so a proxy hides nothing. The accepted cost is stated under Known limitations.
+**Emby's own licensing and Connect hosts are not bypassed.** `mb3admin.com` and
+`connect.emby.media` go through the proxy like every other destination. Bypassing them would leave a
+server whose only route outward *is* the proxy unable to reach them at all, and it would buy little
+privacy in exchange: a licence check carries the key identifying the installation either way. The
+cost of routing them is stated under Known limitations.
 
 Log messages deliberately contain only scheme, host and port — never the path. Paths and query
 strings of metadata lookups carry title information and frequently API keys.
@@ -192,7 +192,7 @@ English. Pull requests with translations are welcome — see [CONTRIBUTING.md](C
 * **Requests before the first health check.** Under fail-closed, requests are blocked until the
   first check completes. That is intended: unconfirmed proxy availability is not a reason to let
   traffic through.
-* **Emby Premiere validation depends on the proxy.** Licence traffic is no longer bypassed, so
+* **Emby Premiere validation depends on the proxy.** Licence traffic goes through the proxy, so
   under fail-closed an unreachable proxy stops Premiere from validating along with everything else,
   and the proxy's egress address is what Emby's licensing servers see. If that is not what you want,
   put `mb3admin.com`, `*.mb3admin.com` and `connect.emby.media` in the bypass list.
