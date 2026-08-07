@@ -59,7 +59,7 @@ Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as use
 | **Enable proxy** | Off = Emby behaves as if the plugin were not installed. |
 | **Proxy scheme** | `Http`, `Https` or `Socks5`. Only used when the address carries no scheme of its own. |
 | **Proxy address** | `host:port` (e.g. `192.168.1.10:8080`) or a full URL (e.g. `socks5://192.168.1.10:1080`). A port is mandatory. |
-| **Username / Password** | Optional. Take precedence over credentials embedded in the URL. |
+| **Username / Password** | Optional. Take precedence over credentials embedded in the URL. Credentials *in* the address need the URL form (`http://user:password@host:port`); in the bare `host:port` form there is no scheme to attach them to and the address is rejected. |
 | **Ignore certificate validation** | For HTTPS proxies using a self-signed certificate. |
 | **Connect directly when the proxy is unavailable** | Off (default) = fail-closed. On = fail-open. |
 | **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Private and link-local networks are compiled in and always bypassed — see below. |

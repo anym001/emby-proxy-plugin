@@ -69,6 +69,17 @@ namespace EmbyProxyRouter.Proxy
                                 (settings.FailOpen ? " | fail-open" : " | fail-closed") +
                                 " | check interval " + (int)settings.HealthCheckInterval.TotalSeconds + " s");
                 }
+
+                // Only while enabled, on the same reasoning as ConfigError above: an unusable check
+                // URL on a switched-off plugin is not something to shout about. Already English —
+                // see ProxySettings.ConfigWarnings.
+                if (settings.Enabled)
+                {
+                    for (var i = 0; i < settings.ConfigWarnings.Count; i++)
+                    {
+                        Logger.Warn("Proxy Router: " + settings.ConfigWarnings[i]);
+                    }
+                }
             }
 
             if (HealthChecker != null)

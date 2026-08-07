@@ -36,6 +36,14 @@ them, and never commit build output.
 **The pinned Emby version lives in `build/emby-version.txt` and nowhere else.** The fetch script and
 all workflows read it. Do not reintroduce a literal default alongside it.
 
+**The version pin is two files.** `build/emby-sha256.txt` carries the SHA-256 of the package that
+version resolves to, and `fetch-emby-refs.sh` refuses to extract the pinned version without a
+matching entry — that download decides what ships, since the release DLL compiles against the
+assemblies inside it and `verify-patch-target.sh` reads its target out of the same file. Change the
+two together; bumping the version alone leaves a pin that cannot be built. A non-pinned version has
+no entry on purpose (that is the new-Emby-release check), reports itself as unverified, and never
+publishes. The bump pull request `ci.yml` opens writes both files.
+
 CI is three workflows plus Dependabot, split on one principle: **verifying a change and shipping a
 deliverable are separate events.** Do not merge them back together.
 

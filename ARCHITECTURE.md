@@ -270,6 +270,29 @@ For a different Emby version:
 FORCE=1 ./build/fetch-emby-refs.sh 4.9.6.0
 ```
 
+#### The checksum pin
+
+`build/emby-sha256.txt` holds the SHA-256 of the package the pinned version resolves to, and the
+fetch script **refuses to extract** the pinned version unless it matches — nothing is written to
+`lib/` on a mismatch. This download decides what ships: the release DLL is compiled against the
+assemblies inside it, and `verify-patch-target.sh` reads its patch target out of the same file.
+
+Be precise about what this does and does not buy. HTTPS authenticates the host; it says nothing
+about the artefact still being the one this repository was verified against. The checksum closes
+that second gap and nothing else — it is tamper-evidence for later fetches, not authentication of
+the upstream release. The value is first recorded at the moment a version is adopted, and it lands
+in a pull request a human merges, which is where trusting it is actually decided.
+
+Only the pinned version can be checked, because only it has an entry. `ci.yml` dispatches the script
+against *newer* Emby releases to see whether they still work, and those have no checksum by
+definition; such a run says so and carries on, which is the case it exists for. It also never
+publishes. `release.yml` takes no version input at all, so a release always goes through the
+verified path.
+
+**The two files are one pin.** Bumping the version without the checksum leaves a pin that cannot be
+built — the script fails rather than extracting something unverified. The bump pull request `ci.yml`
+opens writes both.
+
 ### Verifying the patch target
 
 ```bash
@@ -476,7 +499,8 @@ go through the proxy and keeps working under fail-closed.
 ARCHITECTURE.md                     This file
 CONTRIBUTING.md                     How to build, verify and submit a change
 build/emby-version.txt              The pinned Emby version (single source of truth)
-build/fetch-emby-refs.sh            Fetches the Emby assemblies
+build/emby-sha256.txt               SHA-256 of the pinned version's package; the other half of the pin
+build/fetch-emby-refs.sh            Fetches the Emby assemblies, verifying that checksum
 build/verify-patch-target.sh        Asserts the patched method still matches
 build/verify-single-dll.sh          Asserts the output is still one self-contained file
 build/catalog-entry.sh              Generates the package entry for Emby's plugin catalog

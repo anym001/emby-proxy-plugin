@@ -83,6 +83,9 @@
   "LogReasonNotChecked": "proxy status has not been checked yet",
   "LogReasonUnreachable": "proxy is unreachable",
 
+  "LogCheckUrlInvalid": "Check URL '{0}' is not a valid absolute URL and was ignored - the {1} probe is not running.",
+  "LogCheckUrlScheme": "Check URL '{0}' was ignored: the {1} field needs a {1}:// URL, this one is {2}://. That probe is not running, so a proxy can now pass the check without its {1} path having been exercised.",
+
   "LogBlocked": "Proxy unreachable - request blocked: {0} ({1}). Fail-closed is active.",
   "LogFailOpen": "Fail-open active - request is going out DIRECTLY, without the proxy: {0} ({1})",
   "LogSuppressed": " [+{0} identical in the last {1} s]",
@@ -96,6 +99,7 @@
   "ErrNeedPort": "Proxy address needs a port, for example 192.168.1.10:8080 or socks5://192.168.1.10:1080",
   "ErrPortNotNumber": "Proxy port is not a number: {0}",
   "ErrNoHost": "Proxy address contains no host.",
+  "ErrUserInfoNeedsScheme": "The proxy address carries credentials but no scheme. Write it as http://user:password@192.168.1.10:8080, or leave the credentials out of the address and use the username and password fields.",
   "ErrInvalidHost": "Proxy address contains an invalid host: {0}",
   "ErrNeedExplicitPort": "Proxy address needs an explicit port.",
   "ErrPortRange": "Proxy port is outside 1-65535: {0}",

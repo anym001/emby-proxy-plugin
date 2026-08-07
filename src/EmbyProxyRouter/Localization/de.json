@@ -85,6 +85,7 @@
   "ErrNeedPort": "Proxy-Adresse braucht einen Port, z. B. 192.168.1.10:8080 oder socks5://192.168.1.10:1080",
   "ErrPortNotNumber": "Proxy-Port ist keine Zahl: {0}",
   "ErrNoHost": "Proxy-Adresse enthält keinen Host.",
+  "ErrUserInfoNeedsScheme": "Die Proxy-Adresse enthält Zugangsdaten, aber kein Schema. Schreibe sie als http://benutzer:passwort@192.168.1.10:8080 – oder lass die Zugangsdaten aus der Adresse weg und nutze die Felder für Benutzername und Passwort.",
   "ErrInvalidHost": "Proxy-Adresse enthält einen ungültigen Host: {0}",
   "ErrNeedExplicitPort": "Proxy-Adresse braucht einen expliziten Port.",
   "ErrPortRange": "Proxy-Port liegt außerhalb von 1-65535: {0}",

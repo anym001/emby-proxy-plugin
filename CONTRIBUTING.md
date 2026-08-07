@@ -51,6 +51,12 @@ real as well.
 signature no longer matches never applies: the plugin installs cleanly, reports no error, and
 silently routes nothing.
 
+**The pinned Emby version is two files, not one.** `build/emby-version.txt` and the matching entry in
+`build/emby-sha256.txt` are changed together — the fetch script refuses to extract the pinned version
+without a checksum that matches, so bumping one alone leaves a pin nobody can build. A version other
+than the pinned one has no checksum by design; the script says so and continues, which is what a run
+checking a *new* Emby release needs. Nothing built that way is ever published.
+
 ## Conventions
 
 - **English everywhere** — code, comments, YAML, documentation, commit messages, PR titles.

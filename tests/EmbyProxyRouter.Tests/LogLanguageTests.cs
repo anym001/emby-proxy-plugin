@@ -101,7 +101,8 @@ namespace EmbyProxyRouter.Tests
                      {
                          "LogBlocked", "LogFailOpen", "LogSuppressed",
                          "LogReasonDisabled", "LogReasonMisconfigured", "LogReasonBypassed",
-                         "LogReasonReachable", "LogReasonNotChecked", "LogReasonUnreachable"
+                         "LogReasonReachable", "LogReasonNotChecked", "LogReasonUnreachable",
+                         "LogCheckUrlInvalid", "LogCheckUrlScheme"
                      })
             {
                 Assert.True(english.ContainsKey(key), "en.json is missing " + key);
@@ -278,6 +279,30 @@ namespace EmbyProxyRouter.Tests
             var english = Strings.LabelEnableProxy;
 
             AsGerman(() => Assert.NotEqual(english, Strings.LabelEnableProxy));
+        }
+
+        /// <summary>
+        /// A discarded check URL has one audience — the log — so it is English, always.
+        /// </summary>
+        /// <remarks>
+        /// Unlike <c>ConfigError</c> next door, nothing on the settings page shows these: the page
+        /// cannot produce one, because Validate rejects a bad check URL before it can be saved. So
+        /// they are rendered once, in English, rather than carried as a <see cref="LocalizedText"/>.
+        /// </remarks>
+        [Fact]
+        public void ADiscardedCheckUrlIsReportedInEnglishWhateverTheDisplayLanguage()
+        {
+            Func<string> warn = () => ProxySettings.FromOptions(new PluginOptions
+            {
+                EnableProxy = true,
+                ProxyAddress = "http://proxy.example.com:8080",
+                HealthCheckUrlHttp = "https://check.example.com/"
+            }).ConfigWarnings.Single();
+
+            var english = warn();
+            Assert.Contains("check.example.com", english);
+
+            AsGerman(() => Assert.Equal(english, warn()));
         }
 
         /// <summary>

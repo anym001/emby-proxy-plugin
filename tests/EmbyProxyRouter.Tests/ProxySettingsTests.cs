@@ -83,6 +83,98 @@ namespace EmbyProxyRouter.Tests
             Assert.Empty(settings.HealthCheckUrls);
         }
 
+        /// <summary>
+        /// Regression: the scheme the two fields promise was enforced only by the settings page.
+        /// </summary>
+        /// <remarks>
+        /// Same hole as the interval ceiling above, and a worse one. The fields are split by scheme
+        /// so that one HTTP and one HTTPS probe together prove the proxy both forwards *and*
+        /// tunnels; a proxy can serve one and refuse the other. <c>Validate</c> rejected a mismatched
+        /// scheme on the page, but the options JSON is read back without going through it — so an
+        /// https:// URL hand-edited into the HTTP field probed the CONNECT tunnel twice and reported
+        /// a healthy proxy whose forwarding path had never been exercised.
+        /// </remarks>
+        [Fact]
+        public void ACheckUrlWhoseSchemeContradictsItsFieldIsDropped()
+        {
+            var settings = ProxySettings.FromOptions(new PluginOptions
+            {
+                EnableProxy = true,
+                ProxyAddress = "http://proxy.example.com:8080",
+                HealthCheckUrlHttp = "https://check.example.com/",   // wrong field
+                HealthCheckUrlHttps = "https://check.example.com/"
+            });
+
+            // The surviving entry is the HTTPS one; the plain-HTTP path is now known to be
+            // unchecked rather than believed to be covered.
+            Assert.Single(settings.HealthCheckUrls);
+            Assert.StartsWith("https://", settings.HealthCheckUrls[0]);
+
+            // And the drop is reported, because the plugin does not fail silently.
+            Assert.Single(settings.ConfigWarnings);
+            Assert.Contains("https://check.example.com/", settings.ConfigWarnings[0]);
+        }
+
+        [Theory]
+        [InlineData("not a url")]
+        [InlineData("/relative/only")]
+        [InlineData("ftp://check.example.com/")]
+        [InlineData("file:///etc/passwd")]
+        public void AnUnusableCheckUrlIsDroppedAndReported(string url)
+        {
+            var settings = ProxySettings.FromOptions(new PluginOptions
+            {
+                EnableProxy = true,
+                ProxyAddress = "http://proxy.example.com:8080",
+                HealthCheckUrlHttp = url,
+                HealthCheckUrlHttps = null
+            });
+
+            Assert.Empty(settings.HealthCheckUrls);
+            Assert.Single(settings.ConfigWarnings);
+        }
+
+        [Fact]
+        public void AValidConfigurationProducesNoWarnings()
+        {
+            var settings = ProxySettings.FromOptions(new PluginOptions
+            {
+                EnableProxy = true,
+                ProxyAddress = "http://proxy.example.com:8080",
+                HealthCheckUrlHttp = "http://check.example.com/",
+                HealthCheckUrlHttps = "https://check.example.com/"
+            });
+
+            Assert.Equal(2, settings.HealthCheckUrls.Count);
+            Assert.Empty(settings.ConfigWarnings);
+        }
+
+        /// <summary>
+        /// An empty field is a deliberate "skip this probe", not something to warn about.
+        /// </summary>
+        [Fact]
+        public void SkippingAProbeIsNotAWarning()
+        {
+            var settings = ProxySettings.FromOptions(new PluginOptions
+            {
+                EnableProxy = true,
+                ProxyAddress = "http://proxy.example.com:8080",
+                HealthCheckUrlHttp = "   ",
+                HealthCheckUrlHttps = null
+            });
+
+            Assert.Empty(settings.HealthCheckUrls);
+            Assert.Empty(settings.ConfigWarnings);
+        }
+
+        [Fact]
+        public void TheDisabledSnapshotCarriesAnEmptyWarningList()
+        {
+            // Read on the routing path without a null check, so it must never be null.
+            Assert.Empty(ProxySettings.Disabled().ConfigWarnings);
+            Assert.Empty(ProxySettings.FromOptions(null).ConfigWarnings);
+        }
+
         // --- Endpoint and errors ----------------------------------------------------------------
 
         [Fact]

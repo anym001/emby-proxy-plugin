@@ -80,11 +80,14 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      # Keyed on the fetch script and on build/emby-sha256.txt, matching ci.yml -
+      # a cache hit skips the download and with it the checksum verification, so
+      # a corrected checksum has to invalidate the entry it was meant to re-check.
       - name: Cache Emby assemblies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: lib
-          key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh') }}
+          key: emby-refs-${{ steps.ctx.outputs.version }}-${{ hashFiles('build/fetch-emby-refs.sh', 'build/emby-sha256.txt') }}
 
       - name: Fetch Emby assemblies
         env:
