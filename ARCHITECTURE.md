@@ -228,17 +228,37 @@ list.
 
 ## The default bypass list
 
-RFC1918, loopback and link-local, and nothing else. It is a safety net, not policy: sending LAN
-traffic through a remote proxy is never the intent, and under fail-closed an unreachable proxy would
-otherwise cut the server off from its own network.
+Two constants, split by whether the user may switch them off.
 
-Single-label hostnames (`nas`, `router`) are bypassed too, but in `IsBypassed` rather than in
-`Always`, because no rule syntax in that list can express "any host with no dot". A name with no dot
-cannot be a public DNS name — it resolves through the hosts file, the machine's search domain or
-mDNS — so a proxy elsewhere has no way to look it up, and proxying one cannot succeed. This is the
-one case .NET's own `WebProxy(bypassOnLocal: true)` covers that a CIDR list cannot express. A
-trailing dot is folded away first, for the same reason the IPv4-mapped IPv6 form is: a destination
-must not change route because of how it happened to be spelled.
+`BypassRules.Always` is loopback only — `127.0.0.0/8`, `::1`, `localhost` — and is merged
+unconditionally. A proxy elsewhere has no route back to this machine, so a request to the server's
+own loopback address cannot succeed through it under any configuration; a switch for that would only
+have a wrong position and a right one. .NET's own `WebProxy` draws the line in the same place:
+`IsBypassed` returns true for a loopback host before it consults `BypassProxyOnLocal` or the bypass
+list.
+
+`BypassRules.PrivateNetworks` — RFC1918, `169.254.0.0/16`, `fc00::/7`, `fe80::/10`, `*.local` — is
+merged only when `PluginOptions.BypassPrivateNetworks` is set, which it is by default. It is a
+safety net rather than policy: with it off and fail-closed active, an unreachable proxy takes the
+server's own LAN with it. It is switchable because "everything, without exception, through the
+proxy" is a legitimate thing to want on a host whose only route outward is a tunnel.
+
+`Parse` takes the flag as a required parameter rather than an optional one, for the same reason the
+fixed entries are merged inside it: a caller that can omit the question is a caller that will
+eventually answer it by accident.
+
+Single-label hostnames (`nas`, `router`) follow the same switch but live in `IsBypassed` rather than
+in either constant, because no rule syntax in that list can express "any host with no dot". A name
+with no dot cannot be a public DNS name — it resolves through the hosts file, the machine's search
+domain or mDNS — so a proxy elsewhere has no way to look it up, and proxying one cannot succeed.
+This is the one case .NET's own `WebProxy(bypassOnLocal: true)` covers that a CIDR list cannot
+express. A trailing dot is folded away first, for the same reason the IPv4-mapped IPv6 form is: a
+destination must not change route because of how it happened to be spelled.
+
+What neither constant can cover, because matching is literal and does no DNS: a LAN device addressed
+by a dotted name (`emby.lan`, `nas.home.arpa`, an own domain pointing at a 192.168 address). That is
+a name, not an IP, so the CIDR rules never see it. The user's bypass list is the answer, and it
+applies on top of both constants and regardless of the switch.
 
 **Emby's own endpoints are deliberately not bypassed.** `mb3admin.com` (`PluginSecurityManager`:
 `/admin/service/registration/validate`, `/admin/service/appstore/register`, and the plugin catalogue

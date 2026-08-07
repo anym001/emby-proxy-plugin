@@ -102,6 +102,20 @@ namespace EmbyProxyRouter
 
         // ---- Bypass -----------------------------------------------------------------------------
 
+        /// <summary>
+        /// Whether RFC1918, link-local, ULA, <c>*.local</c> and single-label hosts skip the proxy.
+        /// </summary>
+        /// <remarks>
+        /// On by default, and switching it off is the consequential direction: with it off and
+        /// fail-closed active, an unreachable proxy takes the server's own LAN with it — other Emby
+        /// servers, DLNA endpoints, a local metadata cache. It exists because "everything, without
+        /// exception, through the proxy" is a legitimate thing to want on a host whose only route
+        /// outward is a tunnel. Loopback is never affected; see <see cref="BypassRules.Always"/>.
+        /// </remarks>
+        [DisplayNameL(nameof(Strings.LabelBypassPrivate), typeof(Strings))]
+        [DescriptionL(nameof(Strings.DescBypassPrivate), typeof(Strings))]
+        public bool BypassPrivateNetworks { get; set; } = true;
+
         [DisplayNameL(nameof(Strings.LabelBypassList), typeof(Strings))]
         [DescriptionL(nameof(Strings.DescBypassList), typeof(Strings))]
         [EditMultiline(6)]
@@ -151,7 +165,7 @@ namespace EmbyProxyRouter
                 context.AddValidationError(nameof(ProxyAddress), error.Localized());
             }
 
-            var rules = BypassRules.Parse(BypassList);
+            var rules = BypassRules.Parse(BypassList, BypassPrivateNetworks);
             foreach (var ruleError in rules.Errors)
             {
                 context.AddValidationError(nameof(BypassList), ruleError);

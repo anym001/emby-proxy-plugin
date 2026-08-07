@@ -39,6 +39,9 @@ namespace EmbyProxyRouter.Localization
         public static string LabelFailOpen => Localizer.Get(nameof(LabelFailOpen));
         public static string DescFailOpen => Localizer.Get(nameof(DescFailOpen));
 
+        public static string LabelBypassPrivate => Localizer.Get(nameof(LabelBypassPrivate));
+        public static string DescBypassPrivate => Localizer.Get(nameof(DescBypassPrivate));
+
         public static string LabelBypassList => Localizer.Get(nameof(LabelBypassList));
         public static string DescBypassList => Localizer.Get(nameof(DescBypassList));
 

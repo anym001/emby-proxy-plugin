@@ -3,7 +3,7 @@
   "_languageName": "English",
 
   "EditorTitle": "Proxy Router",
-  "EditorDescription": "Routes outbound HTTP(S) traffic initiated by the Emby core (metadata providers, remote images, subtitle downloads) through a proxy. Private networks and short hostnames are always contacted directly.",
+  "EditorDescription": "Routes outbound HTTP(S) traffic initiated by the Emby core (metadata providers, remote images, subtitle downloads) through a proxy. Private networks and short hostnames are contacted directly unless you switch that off.",
 
   "LabelProxyStatus": "Proxy status",
   "LabelFailurePolicy": "Behaviour on proxy failure",
@@ -29,8 +29,11 @@
   "LabelFailOpen": "Connect directly when the proxy is unavailable",
   "DescFailOpen": "OFF (default, fail-closed): if the proxy is unreachable, affected requests are aborted and logged. ON (fail-open): requests go straight out to the internet without the proxy - every such case is logged as a warning.",
 
+  "LabelBypassPrivate": "Bypass proxy for private networks",
+  "DescBypassPrivate": "ON (default): private networks (10.x, 172.16-31.x, 192.168.x), link-local, IPv6 ULA, *.local and hostnames without a dot (nas, router) are contacted directly. OFF: they go through the proxy too - which under fail-closed means an unreachable proxy also cuts the server off from its own LAN. Only switch this off if the proxy is genuinely the machine's only route outward. The server's own loopback address is never proxied either way.",
+
   "LabelBypassList": "Bypass list",
-  "DescBypassList": "Additional entries, one per line. Accepts CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution is performed - hostnames are matched literally. Private networks, and any hostname with no dot in it, are always bypassed and need no entry here. Emby's licensing servers are not - they go through the proxy unless you add them.",
+  "DescBypassList": "Additional entries, one per line. Accepts CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution is performed - hostnames are matched literally. Entries here are additional to whatever the switch above covers, and they apply even when it is off. Emby's licensing servers are not bypassed by default - add them here if you want them contacted directly.",
 
   "LabelCheckUrlHttp": "Check URL (HTTP)",
   "DescCheckUrlHttp": "Tests whether the proxy forwards plain HTTP. Must answer 2xx; redirects are not followed and therefore fail. Leave empty to skip this check.",

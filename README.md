@@ -14,7 +14,8 @@ while always contacting private networks directly.
 * **Fail-closed by default:** if the proxy is unreachable, affected requests are aborted and logged
   rather than silently falling back to a direct connection. Fail-open is available as a deliberate
   opt-in.
-* Always routes RFC1918, loopback, link-local and single-label hostnames (`nas`, `router`) directly.
+* Routes RFC1918, link-local and single-label hostnames (`nas`, `router`) directly by default, with
+  a switch to send those through the proxy too. Loopback is never proxied.
 
 ## What this plugin explicitly does NOT do
 
@@ -62,7 +63,8 @@ Proxy status: REACHABLE - HTTP check via socks5://192.168.1.10:1080 (auth as use
 | **Username / Password** | Optional. Take precedence over credentials embedded in the URL. Credentials *in* the address need the URL form (`http://user:password@host:port`); in the bare `host:port` form there is no scheme to attach them to and the address is rejected. |
 | **Ignore certificate validation** | For HTTPS proxies using a self-signed certificate. |
 | **Connect directly when the proxy is unavailable** | Off (default) = fail-closed. On = fail-open. |
-| **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Private and link-local networks are compiled in and always bypassed — see below. |
+| **Bypass proxy for private networks** | On (default) = RFC1918, link-local, ULA, `*.local` and dotless hostnames go directly. Off = they go through the proxy too, which under fail-closed means a dead proxy also cuts the server off from its own LAN. Loopback is unaffected either way. |
+| **Bypass list** | *Additional* entries, one per line: CIDR, single IP, hostname or `*.example.com`. Applies on top of the switch above, and still applies when it is off. |
 | **Check URL (HTTP)** | Tests whether the proxy forwards plain HTTP. Must answer 2xx; redirects are not followed and therefore fail. Empty = skip. |
 | **Check URL (HTTPS)** | Tests whether the proxy opens a CONNECT tunnel — the path almost all Emby traffic takes. Both checks must succeed. Both fields empty = TCP check only. |
 | **Check interval** | Seconds between reachability checks. Between 10 and 3600; values outside that range are clamped, including ones edited straight into the options file. |
@@ -99,24 +101,40 @@ WARN  Proxy unreachable - request blocked: https://api.themoviedb.org (proxy is 
 This affects the log only. Every blocked request is still blocked, and still fails with its own
 message.
 
-### What is always bypassed
+### What is bypassed without any configuration
 
-These are compiled into the plugin and applied on top of whatever the bypass list contains. They
-cannot be removed from the settings page:
+**Never proxied, not switchable:**
 
 ```
-10.0.0.0/8   172.16.0.0/12   192.168.0.0/16   127.0.0.0/8   169.254.0.0/16
-::1          fc00::/7        fe80::/10        localhost     *.local
+127.0.0.0/8   ::1   localhost
+```
+
+A proxy somewhere else has no route back to this machine, so a request to the server's own loopback
+address sent through it cannot succeed however the plugin is configured. Making that switchable
+would only offer a setting whose "on" position is always wrong. .NET's own `WebProxy` agrees —
+it bypasses a loopback host before it consults its bypass settings at all.
+
+**Bypassed by default, controlled by "Bypass proxy for private networks":**
+
+```
+10.0.0.0/8   172.16.0.0/12   192.168.0.0/16   169.254.0.0/16
+fc00::/7     fe80::/10       *.local
 ```
 
 Plus any hostname with **no dot in it** — `nas`, `router`, `emby`. A single label cannot be a public
 DNS name: it resolves through the hosts file, the machine's search domain or mDNS, none of which a
-proxy elsewhere can do. Proxying one cannot succeed, and under fail-closed it would cost the server
-every local service it reaches by short name. A trailing dot is ignored, so `nas.` is `nas`.
+proxy elsewhere can do. A trailing dot is ignored, so `nas.` is `nas`.
 
-Sending LAN traffic through a remote proxy is never the intent, and under fail-closed an unreachable
-proxy would otherwise cut the server off from its own network. The bypass list on the settings page
-is therefore purely *additional* — it starts empty.
+Sending LAN traffic through a remote proxy is rarely the intent, and under fail-closed an unreachable
+proxy would otherwise cut the server off from its own network — which is why this is on by default.
+Switch it off when the proxy genuinely is the machine's only route outward and you want everything,
+without exception, to take it.
+
+Note that the match is **literal, with no DNS resolution** (see Known limitations). A LAN device
+addressed by a *dotted* name — `emby.lan`, `nas.home.arpa`, `nas.fritz.box`, or your own domain
+pointing at a 192.168 address — is covered by none of the above, because that is a name and not an
+IP. Put those in the bypass list. The list is *additional* — it starts empty and it keeps working
+when the switch is off.
 
 **Emby's own licensing and Connect hosts are not on this list.** They were once, and are not any
 more: `mb3admin.com` and `connect.emby.media` go through the proxy like every other destination.

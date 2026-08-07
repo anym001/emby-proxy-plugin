@@ -19,15 +19,16 @@ namespace EmbyProxyRouter.Proxy
     public sealed class BypassRules
     {
         /// <summary>
-        /// Applied unconditionally, on top of whatever the user's list contains.
+        /// Applied unconditionally — not even the private-networks switch turns these off.
         /// </summary>
         /// <remarks>
-        /// One group only, and it is there as a safety net rather than as policy: private, loopback
-        /// and link-local ranges. Clearing the text box otherwise sent LAN traffic (other Emby
-        /// servers, DLNA endpoints, a local metadata cache) out through a remote proxy, and under
-        /// fail-closed cut the server off from its own network whenever that proxy was down. There
-        /// is no legitimate reason to proxy 127.0.0.0/8. Compiled in because the README and the
-        /// settings page promise it, and a promise left to an editable default is a suggestion.
+        /// The server's own loopback interface. Nothing is gained by sending a request to 127.0.0.1
+        /// out to a proxy somewhere else, and everything is lost: the proxy has no route back to
+        /// this machine, so the request cannot succeed however the plugin is configured. Leaving it
+        /// switchable would only offer a setting whose "on" position is always wrong.
+        ///
+        /// .NET's own <c>WebProxy</c> takes the same view — <c>IsBypassed</c> returns true for a
+        /// loopback host before it even looks at <c>BypassProxyOnLocal</c> or the bypass list.
         ///
         /// Emby's licensing and Connect hosts (mb3admin.com, connect.emby.media) were once fixed
         /// entries here and deliberately are not any more: they go through the proxy like every
@@ -37,28 +38,52 @@ namespace EmbyProxyRouter.Proxy
         /// a proxy hides nothing. The cost of the change is stated plainly in README.md: under
         /// fail-closed, a dead proxy now also stops Emby Premiere from validating. Do not re-add
         /// them without reopening that trade-off.
-        ///
-        /// Hostnames with no dot are handled in <see cref="IsBypassed"/> instead of here, because no
-        /// rule syntax in this list can express "any single label".
         /// </remarks>
         public const string Always =
+            "127.0.0.0/8\n" +
+            "::1\n" +
+            "localhost";
+
+        /// <summary>
+        /// Merged on top of <see cref="Always"/> unless the user switches the bypass off.
+        /// </summary>
+        /// <remarks>
+        /// RFC1918, carrier-grade link-local, IPv6 ULA and mDNS. Bypassed by default because the
+        /// alternative bites hard: with the text box empty, LAN traffic (other Emby servers, DLNA
+        /// endpoints, a local metadata cache) went out through a remote proxy, and under fail-closed
+        /// the server lost its own network whenever that proxy was down.
+        ///
+        /// Switchable rather than fixed because "everything, without exception, goes through the
+        /// proxy" is a legitimate thing to want — a server whose only route outward is a VPN or
+        /// SOCKS tunnel has no direct path for this traffic to take anyway. Switching it off is a
+        /// deliberate choice with a stated cost, not a default anybody arrives at by accident.
+        ///
+        /// Hostnames with no dot are governed by the same switch but handled in
+        /// <see cref="IsBypassed"/>, because no rule syntax in this list can express "any single
+        /// label".
+        /// </remarks>
+        public const string PrivateNetworks =
             "10.0.0.0/8\n" +
             "172.16.0.0/12\n" +
             "192.168.0.0/16\n" +
-            "127.0.0.0/8\n" +
             "169.254.0.0/16\n" +
-            "::1\n" +
             "fc00::/7\n" +
             "fe80::/10\n" +
-            "localhost\n" +
             "*.local";
 
         private readonly List<CidrRule> _cidrRules = new List<CidrRule>();
         private readonly HashSet<string> _exactHosts =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _suffixHosts = new List<string>();
+        private bool _bypassPrivateNetworks;
 
         public IReadOnlyList<string> Errors { get; private set; }
+
+        /// <summary>Whether <see cref="PrivateNetworks"/> is part of this rule set.</summary>
+        public bool BypassPrivateNetworks
+        {
+            get { return _bypassPrivateNetworks; }
+        }
 
         /// <summary>
         /// Parses the user's list, always on top of <see cref="Always"/>.
@@ -66,14 +91,23 @@ namespace EmbyProxyRouter.Proxy
         /// <remarks>
         /// The fixed entries are merged here rather than at the call sites so that every consumer —
         /// routing, validation, the disabled state — sees the same rule set. A second Parse overload
-        /// that skipped them would be one refactor away from becoming the one that gets called.
+        /// that skipped them would be one refactor away from becoming the one that gets called,
+        /// which is also why <paramref name="bypassPrivateNetworks"/> has no default: every caller
+        /// has to say which policy it means, rather than inheriting one it did not think about.
         /// </remarks>
-        public static BypassRules Parse(string text)
+        public static BypassRules Parse(string text, bool bypassPrivateNetworks)
         {
             var rules = new BypassRules();
             var errors = new List<string>();
 
+            rules._bypassPrivateNetworks = bypassPrivateNetworks;
+
             Add(rules, errors, Always);
+
+            if (bypassPrivateNetworks)
+            {
+                Add(rules, errors, PrivateNetworks);
+            }
 
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -212,10 +246,11 @@ namespace EmbyProxyRouter.Proxy
             // server loses the local services it reaches by short name.
             //
             // This is the one case .NET's own WebProxy(bypassOnLocal: true) covers that a CIDR list
-            // cannot express, which is why it lives here as code rather than as an entry in Always.
-            // Dotless public TLDs have existed historically, but ICANN prohibits them for gTLDs
-            // (SAC053) and nothing Emby talks to uses one.
-            if (host.IndexOf('.') < 0)
+            // cannot express, which is why it lives here as code rather than as an entry in
+            // PrivateNetworks — and why it follows the same switch: a single label is local in
+            // exactly the sense that switch is about. Dotless public TLDs have existed historically,
+            // but ICANN prohibits them for gTLDs (SAC053) and nothing Emby talks to uses one.
+            if (_bypassPrivateNetworks && host.IndexOf('.') < 0)
             {
                 return true;
             }

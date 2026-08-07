@@ -65,7 +65,7 @@ namespace EmbyProxyRouter.Proxy
             return new ProxySettings
             {
                 Enabled = false,
-                Bypass = BypassRules.Parse(null),
+                Bypass = BypassRules.Parse(null, true),
                 HealthCheckUrls = new string[0],
                 ConfigWarnings = new string[0],
                 HealthCheckInterval = TimeSpan.FromSeconds(60)
@@ -102,7 +102,7 @@ namespace EmbyProxyRouter.Proxy
             var settings = new ProxySettings
             {
                 Enabled = options.EnableProxy,
-                Bypass = BypassRules.Parse(options.BypassList),
+                Bypass = BypassRules.Parse(options.BypassList, options.BypassPrivateNetworks),
                 FailOpen = options.AllowDirectWhenProxyUnavailable,
                 IgnoreCertificateValidation = options.IgnoreCertificateValidation,
                 HealthCheckUrls = urls,

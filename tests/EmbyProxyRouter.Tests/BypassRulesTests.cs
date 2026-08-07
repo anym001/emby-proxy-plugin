@@ -9,7 +9,13 @@ namespace EmbyProxyRouter.Tests
     {
         private static bool IsBypassed(string list, string url)
         {
-            return BypassRules.Parse(list).IsBypassed(new Uri(url));
+            return BypassRules.Parse(list, true).IsBypassed(new Uri(url));
+        }
+
+        /// <summary>With the private-networks switch off, which is not the default.</summary>
+        private static bool IsBypassedWithoutPrivate(string list, string url)
+        {
+            return BypassRules.Parse(list, false).IsBypassed(new Uri(url));
         }
 
         // --- The compiled-in entries -----------------------------------------------------------
@@ -120,6 +126,73 @@ namespace EmbyProxyRouter.Tests
             Assert.False(IsBypassed(null, "https://api.themoviedb.org./"));
         }
 
+        // --- The private-networks switch ---------------------------------------------------------
+
+        /// <summary>
+        /// Switched off, the private ranges go through the proxy like anything else.
+        /// </summary>
+        /// <remarks>
+        /// The option exists for a host whose only route outward is a tunnel, where "everything,
+        /// without exception" is the whole point and there is no direct path for this traffic to
+        /// take anyway. The cost is real and documented: under fail-closed an unreachable proxy now
+        /// takes the server's own LAN with it.
+        /// </remarks>
+        [Theory]
+        [InlineData("http://10.1.2.3/")]
+        [InlineData("http://192.168.1.10/")]
+        [InlineData("http://172.16.0.1/")]
+        [InlineData("http://169.254.1.1/")]
+        [InlineData("http://[fc00::1]/")]
+        [InlineData("http://[fe80::1]/")]
+        [InlineData("http://anything.local/")]
+        [InlineData("http://nas:8096/")]        // the single-label rule follows the same switch
+        [InlineData("http://[::ffff:10.0.0.1]/")]
+        public void SwitchingOffPrivateNetworksSendsThemThroughTheProxy(string url)
+        {
+            Assert.True(IsBypassed(null, url));                    // default
+            Assert.False(IsBypassedWithoutPrivate(null, url));     // switched off
+        }
+
+        /// <summary>
+        /// Loopback is never switchable, because the "on" position would always be wrong.
+        /// </summary>
+        /// <remarks>
+        /// A proxy elsewhere has no route back to this machine, so a request to 127.0.0.1 sent
+        /// through it cannot succeed under any configuration. .NET's own WebProxy takes the same
+        /// view: IsBypassed returns true for a loopback host before it consults BypassProxyOnLocal
+        /// or the bypass list at all.
+        /// </remarks>
+        [Theory]
+        [InlineData("http://127.0.0.1/")]
+        [InlineData("http://127.0.0.53:8096/")]
+        [InlineData("http://[::1]/")]
+        [InlineData("http://localhost/")]
+        [InlineData("http://[::ffff:127.0.0.1]/")]
+        public void LoopbackIsBypassedEvenWithPrivateNetworksSwitchedOff(string url)
+        {
+            Assert.True(IsBypassedWithoutPrivate(null, url));
+        }
+
+        /// <summary>
+        /// The user's own list still applies with the switch off — that is what makes it a usable
+        /// escape hatch rather than a second copy of the same policy.
+        /// </summary>
+        [Fact]
+        public void TheUserListStillAppliesWithPrivateNetworksSwitchedOff()
+        {
+            Assert.True(IsBypassedWithoutPrivate("192.168.0.0/16", "http://192.168.1.10/"));
+            Assert.True(IsBypassedWithoutPrivate("nas.home.arpa", "http://nas.home.arpa/"));
+            Assert.True(IsBypassedWithoutPrivate("mb3admin.com", "https://mb3admin.com/"));
+        }
+
+        [Fact]
+        public void TheRuleSetReportsWhichPolicyItWasBuiltWith()
+        {
+            // ProxyRuntime logs this on every apply, so it has to be readable back off the rules.
+            Assert.True(BypassRules.Parse(null, true).BypassPrivateNetworks);
+            Assert.False(BypassRules.Parse(null, false).BypassPrivateNetworks);
+        }
+
         // --- IPv4-mapped IPv6 ------------------------------------------------------------------
 
         /// <summary>
@@ -222,7 +295,7 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void CommentsAndBlankLinesAreIgnored()
         {
-            var rules = BypassRules.Parse("# a comment\n\n   \nreal.example.com\n");
+            var rules = BypassRules.Parse("# a comment\n\n   \nreal.example.com\n", true);
 
             Assert.Empty(rules.Errors);
             Assert.True(rules.IsBypassed(new Uri("https://real.example.com/")));
@@ -237,7 +310,7 @@ namespace EmbyProxyRouter.Tests
         [InlineData("*.")]
         public void AMalformedEntryIsReportedRatherThanSwallowed(string entry)
         {
-            var rules = BypassRules.Parse(entry);
+            var rules = BypassRules.Parse(entry, true);
             Assert.NotEmpty(rules.Errors);
         }
 
@@ -247,7 +320,7 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void AMalformedEntryDoesNotDisableTheValidOnes()
         {
-            var rules = BypassRules.Parse("10.0.0.0/copper\ngood.example.com");
+            var rules = BypassRules.Parse("10.0.0.0/copper\ngood.example.com", true);
 
             Assert.Single(rules.Errors);
             Assert.True(rules.IsBypassed(new Uri("https://good.example.com/")));
@@ -257,7 +330,7 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void AValidListReportsNoErrors()
         {
-            var rules = BypassRules.Parse("10.9.0.0/16\n*.example.com\nhost.example.net\n203.0.113.5");
+            var rules = BypassRules.Parse("10.9.0.0/16\n*.example.com\nhost.example.net\n203.0.113.5", true);
             Assert.Empty(rules.Errors);
         }
 
@@ -268,25 +341,35 @@ namespace EmbyProxyRouter.Tests
         [Fact]
         public void TheCompiledInListIsItselfValid()
         {
-            Assert.Empty(BypassRules.Parse(null).Errors);
+            Assert.Empty(BypassRules.Parse(null, true).Errors);
+            Assert.Empty(BypassRules.Parse(null, false).Errors);
 
-            var entries = BypassRules.Always
-                .Split('\n')
-                .Where(l => l.Trim().Length > 0)
-                .ToArray();
+            var always = Split(BypassRules.Always);
+            var private_ = Split(BypassRules.PrivateNetworks);
 
-            Assert.Equal(10, entries.Length);
+            // Always is loopback only - everything else has to be switchable, or the switch is a
+            // half-truth. Splitting them wrongly is the mistake this catches.
+            Assert.Equal(3, always.Length);
+            Assert.Equal(7, private_.Length);
 
-            // The list is private ranges and nothing else. Emby's own hosts were removed from it
-            // deliberately; a merge that quietly brings them back should fail here.
-            Assert.DoesNotContain(entries, e => e.Contains("emby", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(entries, e => e.Contains("mb3admin", StringComparison.OrdinalIgnoreCase));
+            // Emby's own hosts were removed from both deliberately; a merge that quietly brings
+            // them back should fail here.
+            foreach (var entry in always.Concat(private_))
+            {
+                Assert.DoesNotContain("emby", entry, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("mb3admin", entry, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        private static string[] Split(string list)
+        {
+            return list.Split('\n').Where(l => l.Trim().Length > 0).ToArray();
         }
 
         [Fact]
         public void ANullDestinationIsNotBypassed()
         {
-            Assert.False(BypassRules.Parse(null).IsBypassed(null));
+            Assert.False(BypassRules.Parse(null, true).IsBypassed(null));
         }
     }
 }
