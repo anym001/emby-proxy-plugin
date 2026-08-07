@@ -79,7 +79,7 @@ cat <<EOF
   "isPremium": false,
   "adult": false,
   "shortDescription": "Routes the Emby core's outbound HTTP(S) traffic through an HTTP, HTTPS or SOCKS5 proxy, and blocks it rather than leaking when the proxy is down.",
-  "overview": "Routes outbound HTTP(S) traffic initiated by the Emby core - metadata providers, remote images, subtitle downloads - through an HTTP, HTTPS or SOCKS5 proxy. Fail-closed by default: if the proxy is unreachable, affected requests are aborted and logged instead of silently falling back to a direct connection. Private, loopback and link-local networks and Emby's own licensing servers are always contacted directly. Does not touch ffmpeg, DLNA, client connections or inbound traffic.",
+  "overview": "Routes outbound HTTP(S) traffic initiated by the Emby core - metadata providers, remote images, subtitle downloads - through an HTTP, HTTPS or SOCKS5 proxy. Fail-closed by default: if the proxy is unreachable, affected requests are aborted and logged instead of silently falling back to a direct connection. Private, loopback and link-local networks and short hostnames are always contacted directly. Does not touch ffmpeg, DLNA, client connections or inbound traffic.",
   "richDescUrl": "$REPO_URL/blob/$TAG/README.md",
   "versions": [
     {

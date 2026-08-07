@@ -2,7 +2,7 @@
 
 A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) traffic that the
 **Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5** —
-while always contacting private networks and Emby's licensing servers directly.
+while always contacting private networks directly.
 
 ## What this plugin does
 
@@ -14,7 +14,7 @@ while always contacting private networks and Emby's licensing servers directly.
 * **Fail-closed by default:** if the proxy is unreachable, affected requests are aborted and logged
   rather than silently falling back to a direct connection. Fail-open is available as a deliberate
   opt-in.
-* Always routes RFC1918, loopback, link-local and Emby's licensing/Connect servers directly.
+* Always routes RFC1918, loopback, link-local and single-label hostnames (`nas`, `router`) directly.
 
 ## What this plugin explicitly does NOT do
 
@@ -25,8 +25,8 @@ This is intentional — the point of the project is a single, auditable responsi
 * **No** system-wide proxy configuration. Only Emby's own HTTP stack is redirected; `ffmpeg`, DLNA,
   client connections and everything else are untouched.
 * **No** proxying of inbound connections. Reverse-proxy operation is a different problem.
-* **No** circumvention of Emby's licence check. The licensing servers are on the bypass list on
-  purpose.
+* **No** circumvention of Emby's licence check. Licence traffic goes through the proxy like
+  everything else; the plugin neither blocks it nor rewrites it.
 
 ## Installation
 
@@ -107,17 +107,22 @@ cannot be removed from the settings page:
 ```
 10.0.0.0/8   172.16.0.0/12   192.168.0.0/16   127.0.0.0/8   169.254.0.0/16
 ::1          fc00::/7        fe80::/10        localhost     *.local
-mb3admin.com   *.mb3admin.com   connect.emby.media
 ```
 
-Sending LAN traffic through a remote proxy is never the intent, and under fail-closed an unreachable
-proxy would otherwise cut the server off from its own network. The Emby hosts are fixed for a
-different reason: routing licence traffic through a proxy risks breaking Emby Premiere activation,
-and that is not a consequence anyone should run into by editing a text box. The bypass list on the
-settings page is therefore purely *additional* — it starts empty.
+Plus any hostname with **no dot in it** — `nas`, `router`, `emby`. A single label cannot be a public
+DNS name: it resolves through the hosts file, the machine's search domain or mDNS, none of which a
+proxy elsewhere can do. Proxying one cannot succeed, and under fail-closed it would cost the server
+every local service it reaches by short name. A trailing dot is ignored, so `nas.` is `nas`.
 
-The trade-off is accepted deliberately: on a server whose only route outward is the proxy, these
-hosts become unreachable rather than proxied.
+Sending LAN traffic through a remote proxy is never the intent, and under fail-closed an unreachable
+proxy would otherwise cut the server off from its own network. The bypass list on the settings page
+is therefore purely *additional* — it starts empty.
+
+**Emby's own licensing and Connect hosts are not on this list.** They were once, and are not any
+more: `mb3admin.com` and `connect.emby.media` go through the proxy like every other destination.
+Bypassing them meant a server whose only route outward *is* the proxy could not reach them at all,
+and the privacy argument was thin — a licence check carries the key identifying the installation
+either way, so a proxy hides nothing. The accepted cost is stated under Known limitations.
 
 Log messages deliberately contain only scheme, host and port — never the path. Paths and query
 strings of metadata lookups carry title information and frequently API keys.
@@ -154,9 +159,9 @@ English. Pull requests with translations are welcome — see [CONTRIBUTING.md](C
   enabled and its address is valid — with the plugin switched off, Emby's TLS behaviour is left
   exactly as it was found. But while it is in effect it covers *every* outbound connection the Emby
   core makes: the proxy itself, the destinations tunnelled through it, and the destinations that go
-  out directly because they are on the bypass list — Emby's licensing hosts among them. A
-  certificate callback is handed the TLS handshake, not the request that triggered it, so the plugin
-  cannot narrow this any further. Only enable it when the proxy uses a self-signed certificate.
+  out directly because they are on the bypass list. A certificate callback is handed the TLS
+  handshake, not the request that triggered it, so the plugin cannot narrow this any further. Only
+  enable it when the proxy uses a self-signed certificate.
 * **Credentials are stored in plain text.** Emby persists plugin options as JSON under
   `/config/plugins/configurations/`. The password field is masked in the UI, not in the file.
 * **Bound to an internal Emby method.** The patched method is not public API, so an Emby update can
@@ -165,6 +170,10 @@ English. Pull requests with translations are welcome — see [CONTRIBUTING.md](C
 * **Requests before the first health check.** Under fail-closed, requests are blocked until the
   first check completes. That is intended: unconfirmed proxy availability is not a reason to let
   traffic through.
+* **Emby Premiere validation depends on the proxy.** Licence traffic is no longer bypassed, so
+  under fail-closed an unreachable proxy stops Premiere from validating along with everything else,
+  and the proxy's egress address is what Emby's licensing servers see. If that is not what you want,
+  put `mb3admin.com`, `*.mb3admin.com` and `connect.emby.media` in the bypass list.
 
 ## Further reading
 

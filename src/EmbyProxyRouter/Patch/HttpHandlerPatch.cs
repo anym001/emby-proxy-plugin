@@ -281,10 +281,10 @@ namespace EmbyProxyRouter.Patch
         ///     TLS behaviour exactly as it found it.
         ///
         /// What it still cannot narrow: with the proxy switched on, the relaxation also covers the
-        /// destinations that go out directly because they are on the bypass list — Emby's licensing
-        /// hosts among them. A certificate callback is handed the handshake, not the request, so
-        /// nothing here can tell one connection from another. Documented in README.md under "Known
-        /// limitations" rather than papered over.
+        /// destinations that go out directly because they are on the bypass list. A certificate
+        /// callback is handed the handshake, not the request, so nothing here can tell one
+        /// connection from another. Documented in README.md under "Known limitations" rather than
+        /// papered over.
         ///
         /// The setting is read per callback rather than baked in, because the handler's properties
         /// freeze after its first request: a value captured here could never be revised, and

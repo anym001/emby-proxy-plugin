@@ -22,25 +22,24 @@ namespace EmbyProxyRouter.Proxy
         /// Applied unconditionally, on top of whatever the user's list contains.
         /// </summary>
         /// <remarks>
-        /// Two groups, compiled in for the same reason: the README and the settings page promise
-        /// this behaviour, and leaving a promise to an editable default makes it a suggestion.
+        /// One group only, and it is there as a safety net rather than as policy: private, loopback
+        /// and link-local ranges. Clearing the text box otherwise sent LAN traffic (other Emby
+        /// servers, DLNA endpoints, a local metadata cache) out through a remote proxy, and under
+        /// fail-closed cut the server off from its own network whenever that proxy was down. There
+        /// is no legitimate reason to proxy 127.0.0.0/8. Compiled in because the README and the
+        /// settings page promise it, and a promise left to an editable default is a suggestion.
         ///
-        /// Private, loopback and link-local ranges — clearing the text box otherwise sent LAN
-        /// traffic (other Emby servers, DLNA endpoints, a local metadata cache) out through a remote
-        /// proxy, and under fail-closed cut the server off from its own network whenever that proxy
-        /// was down. There is no legitimate reason to proxy 127.0.0.0/8.
+        /// Emby's licensing and Connect hosts (mb3admin.com, connect.emby.media) were once fixed
+        /// entries here and deliberately are not any more: they go through the proxy like every
+        /// other destination. Bypassing them meant a server whose only route outward *is* the proxy
+        /// could not reach them at all, and the privacy argument for the bypass was thin — a licence
+        /// check carries the key that identifies the installation either way, so sending it through
+        /// a proxy hides nothing. The cost of the change is stated plainly in README.md: under
+        /// fail-closed, a dead proxy now also stops Emby Premiere from validating. Do not re-add
+        /// them without reopening that trade-off.
         ///
-        /// Emby's licensing and Connect hosts — not guesswork, read out of the 4.9.5.0 assemblies:
-        ///   mb3admin.com        — PluginSecurityManager: /admin/service/registration/validate,
-        ///                         /admin/service/appstore/register, and the plugin catalog
-        ///                         (InstallationManager: www.mb3admin.com/admin/service/package/...)
-        ///   connect.emby.media  — Emby.Server.Connect: https://connect.emby.media/service/
-        /// Routing licence traffic through a proxy under fail-closed risks breaking Emby Premiere
-        /// activation, and obscuring licence identity is not what this plugin is for. Fixing them
-        /// here means nobody breaks activation with an edit whose consequence is not obvious.
-        ///
-        /// The trade-off, deliberately accepted: a server whose only route outward is the proxy
-        /// cannot reach these hosts at all. Lifting that would need a code change, not a setting.
+        /// Hostnames with no dot are handled in <see cref="IsBypassed"/> instead of here, because no
+        /// rule syntax in this list can express "any single label".
         /// </remarks>
         public const string Always =
             "10.0.0.0/8\n" +
@@ -52,10 +51,7 @@ namespace EmbyProxyRouter.Proxy
             "fc00::/7\n" +
             "fe80::/10\n" +
             "localhost\n" +
-            "*.local\n" +
-            "mb3admin.com\n" +
-            "*.mb3admin.com\n" +
-            "connect.emby.media";
+            "*.local";
 
         private readonly List<CidrRule> _cidrRules = new List<CidrRule>();
         private readonly HashSet<string> _exactHosts =
@@ -163,6 +159,15 @@ namespace EmbyProxyRouter.Proxy
                 host = host.Substring(1, host.Length - 2);
             }
 
+            // A trailing dot only makes an FQDN explicit: "nas." is "nas" and "emby.local." is
+            // "emby.local". Folding it away means a rule matches whichever spelling reached us,
+            // for the same reason the IPv4-mapped form is folded below — a destination must not
+            // change route because of how it happened to be written.
+            if (host.Length > 1 && host[host.Length - 1] == '.')
+            {
+                host = host.Substring(0, host.Length - 1);
+            }
+
             IPAddress ip;
             if (IPAddress.TryParse(host, out ip))
             {
@@ -198,6 +203,21 @@ namespace EmbyProxyRouter.Proxy
                 {
                     return true;
                 }
+            }
+
+            // A hostname with no dot in it cannot be a public DNS name. It resolves through the
+            // hosts file, the machine's own search domain, or mDNS/NetBIOS — all of which are
+            // meaningless to a proxy somewhere else, which has no way to look it up. So proxying
+            // "nas" or "router" cannot succeed, and under fail-closed it does active harm: the
+            // server loses the local services it reaches by short name.
+            //
+            // This is the one case .NET's own WebProxy(bypassOnLocal: true) covers that a CIDR list
+            // cannot express, which is why it lives here as code rather than as an entry in Always.
+            // Dotless public TLDs have existed historically, but ICANN prohibits them for gTLDs
+            // (SAC053) and nothing Emby talks to uses one.
+            if (host.IndexOf('.') < 0)
+            {
+                return true;
             }
 
             return false;

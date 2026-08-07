@@ -30,10 +30,7 @@ namespace EmbyProxyRouter.Tests
         [InlineData("http://[fe80::1]/")]
         [InlineData("http://localhost/")]
         [InlineData("http://anything.local/")]
-        [InlineData("https://mb3admin.com/")]
-        [InlineData("https://www.mb3admin.com/")]
-        [InlineData("https://connect.emby.media/")]
-        public void PrivateAndLicensingDestinationsAreAlwaysBypassed(string url)
+        public void PrivateDestinationsAreAlwaysBypassed(string url)
         {
             Assert.True(IsBypassed(null, url));
         }
@@ -52,6 +49,75 @@ namespace EmbyProxyRouter.Tests
         public void PublicDestinationsAreNotBypassed(string url)
         {
             Assert.False(IsBypassed(null, url));
+        }
+
+        /// <summary>
+        /// Emby's licensing and Connect hosts go through the proxy like everything else.
+        /// </summary>
+        /// <remarks>
+        /// They were compiled-in bypass entries once. The privacy argument for that was thin — a
+        /// licence check carries the key identifying the installation either way — while the cost
+        /// was real: a server whose only route outward is the proxy could not reach them at all.
+        /// The accepted consequence, stated in README.md, is that a dead proxy under fail-closed now
+        /// also stops Premiere from validating.
+        ///
+        /// Asserted explicitly rather than left to PublicDestinationsAreNotBypassed, so that
+        /// re-adding them has to delete a test that says why they are gone.
+        /// </remarks>
+        [Theory]
+        [InlineData("https://mb3admin.com/")]
+        [InlineData("https://www.mb3admin.com/")]
+        [InlineData("https://connect.emby.media/")]
+        public void EmbysOwnHostsAreNotBypassed(string url)
+        {
+            Assert.False(IsBypassed(null, url));
+        }
+
+        // --- Single-label hostnames --------------------------------------------------------------
+
+        /// <summary>
+        /// A hostname with no dot cannot be a public DNS name, so it is always bypassed.
+        /// </summary>
+        /// <remarks>
+        /// It resolves through the hosts file, the search domain or mDNS/NetBIOS — none of which a
+        /// remote proxy can do. Proxying "nas" cannot succeed, and under fail-closed it costs the
+        /// server every local service it reaches by short name. This is the one thing .NET's
+        /// WebProxy(bypassOnLocal: true) covers that a CIDR list cannot express.
+        /// </remarks>
+        [Theory]
+        [InlineData("http://nas:8096/")]
+        [InlineData("http://router/")]
+        [InlineData("http://emby/")]
+        [InlineData("http://nas./")]        // trailing dot is the same host
+        public void ASingleLabelHostnameIsBypassed(string url)
+        {
+            Assert.True(IsBypassed(null, url));
+        }
+
+        [Theory]
+        [InlineData("http://nas.example.com/")]
+        [InlineData("https://api.themoviedb.org/")]
+        public void ADottedHostnameIsNotCoveredByTheSingleLabelRule(string url)
+        {
+            Assert.False(IsBypassed(null, url));
+        }
+
+        /// <summary>
+        /// A trailing dot only makes an FQDN explicit; it must not change the route.
+        /// </summary>
+        [Theory]
+        [InlineData(null, "http://anything.local./")]
+        [InlineData("intranet.example.com", "https://intranet.example.com./")]
+        [InlineData("*.example.com", "https://sub.example.com./")]
+        public void ATrailingDotDoesNotChangeTheVerdict(string list, string url)
+        {
+            Assert.True(IsBypassed(list, url));
+        }
+
+        [Fact]
+        public void ATrailingDotDoesNotTurnAPublicHostIntoABypassedOne()
+        {
+            Assert.False(IsBypassed(null, "https://api.themoviedb.org./"));
         }
 
         // --- IPv4-mapped IPv6 ------------------------------------------------------------------
@@ -209,7 +275,12 @@ namespace EmbyProxyRouter.Tests
                 .Where(l => l.Trim().Length > 0)
                 .ToArray();
 
-            Assert.Equal(13, entries.Length);
+            Assert.Equal(10, entries.Length);
+
+            // The list is private ranges and nothing else. Emby's own hosts were removed from it
+            // deliberately; a merge that quietly brings them back should fail here.
+            Assert.DoesNotContain(entries, e => e.Contains("emby", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(entries, e => e.Contains("mb3admin", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

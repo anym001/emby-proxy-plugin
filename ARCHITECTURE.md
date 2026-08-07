@@ -119,7 +119,7 @@ nothing for it to excuse, and a disabled plugin has to leave Emby's TLS behaviou
 
 What this still cannot do is distinguish connections. The callback receives the handshake, not the
 request that triggered it, so while the option is in effect it also covers destinations that go out
-directly because they are on the bypass list — Emby's licensing hosts among them. Narrowing that
+directly because they are on the bypass list. Narrowing that
 would mean correlating a handshake back to a request through the connection pool, which is not a
 mechanism worth introducing for an option that is off by default. It is documented in README.md
 under "Known limitations" instead.
@@ -228,16 +228,28 @@ list.
 
 ## The default bypass list
 
-RFC1918, loopback and link-local, plus Emby's own endpoints. The latter are not guesswork; they were
-read out of the 4.9.5.0 assemblies:
+RFC1918, loopback and link-local, and nothing else. It is a safety net, not policy: sending LAN
+traffic through a remote proxy is never the intent, and under fail-closed an unreachable proxy would
+otherwise cut the server off from its own network.
 
-* `mb3admin.com` — `PluginSecurityManager`: `/admin/service/registration/validate` and
-  `/admin/service/appstore/register`; plus the plugin catalogue in `InstallationManager`
-  (`www.mb3admin.com/admin/service/package/...`).
-* `connect.emby.media` — `Emby.Server.Connect`: `https://connect.emby.media/service/`.
+Single-label hostnames (`nas`, `router`) are bypassed too, but in `IsBypassed` rather than in
+`Always`, because no rule syntax in that list can express "any host with no dot". A name with no dot
+cannot be a public DNS name — it resolves through the hosts file, the machine's search domain or
+mDNS — so a proxy elsewhere has no way to look it up, and proxying one cannot succeed. This is the
+one case .NET's own `WebProxy(bypassOnLocal: true)` covers that a CIDR list cannot express. A
+trailing dot is folded away first, for the same reason the IPv4-mapped IPv6 form is: a destination
+must not change route because of how it happened to be spelled.
 
-Sending licence traffic through a proxy under a fail-closed policy risks breaking Emby Premiere
-activation, and obscuring licence identity is not what this plugin is for.
+**Emby's own endpoints are deliberately not bypassed.** `mb3admin.com` (`PluginSecurityManager`:
+`/admin/service/registration/validate`, `/admin/service/appstore/register`, and the plugin catalogue
+in `InstallationManager`) and `connect.emby.media` (`Emby.Server.Connect`) were compiled-in entries
+until they were removed on purpose. Two reasons: a server whose only route outward *is* the proxy
+could not reach them at all, and the privacy argument for the bypass was thin, since a licence check
+carries the key that identifies the installation either way.
+
+The accepted cost is that under fail-closed a dead proxy also stops Premiere from validating, and
+that Emby's licensing servers see the proxy's egress address. A user who wants the old behaviour can
+put the hosts in the bypass list; the plugin no longer decides it for them.
 
 ## Building
 
@@ -484,8 +496,9 @@ dashboard requests, and `classification` is emitted as `"Release"` because the c
 Two consequences worth weighing before pursuing this. The update task is unconditional, so accepting a
 catalog entry means the plugin replaces its own binary on a schedule, driven by a record held by a
 third party — for a plugin whose purpose is control over outbound traffic, that is a real trust
-surface. And `mb3admin.com` is in `BypassRules.Always`, so the update check deliberately does *not*
-go through the proxy and keeps working under fail-closed.
+surface. And `mb3admin.com` is no longer in `BypassRules.Always`, so the update check would go
+through the proxy like any other request — and under fail-closed would be blocked whenever the proxy
+is down, which is one more way for a self-updating plugin to behave unpredictably.
 
 ## Project layout
 

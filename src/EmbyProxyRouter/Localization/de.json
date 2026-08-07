@@ -3,7 +3,7 @@
   "_languageName": "Deutsch",
 
   "EditorTitle": "Proxy Router",
-  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Private Netze und die Emby-eigenen Lizenzserver werden immer direkt angesprochen.",
+  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Private Netze und kurze Hostnamen werden immer direkt angesprochen.",
 
   "LabelProxyStatus": "Proxy-Status",
   "LabelFailurePolicy": "Verhalten bei Proxy-Ausfall",
@@ -30,7 +30,7 @@
   "DescFailOpen": "AUS (Standard, Fail-Closed): Ist der Proxy nicht erreichbar, werden betroffene Requests abgebrochen und protokolliert. EIN (Fail-Open): Requests gehen ohne Proxy direkt ins Internet – jeder solche Fall wird als Warnung geloggt.",
 
   "LabelBypassList": "Bypass-Liste",
-  "DescBypassList": "Zusätzliche Einträge, einer pro Zeile. Erlaubt: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Es findet keine DNS-Auflösung statt – Hostnamen werden literal verglichen. Private Netze und Embys eigene Lizenzserver werden immer am Proxy vorbeigeleitet und brauchen hier keinen Eintrag.",
+  "DescBypassList": "Zusätzliche Einträge, einer pro Zeile. Erlaubt: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Es findet keine DNS-Auflösung statt – Hostnamen werden literal verglichen. Private Netze und jeder Hostname ohne Punkt werden immer am Proxy vorbeigeleitet und brauchen hier keinen Eintrag. Embys Lizenzserver nicht – die laufen über den Proxy, sofern du sie nicht hier einträgst.",
 
   "LabelCheckUrlHttp": "Prüf-URL (HTTP)",
   "DescCheckUrlHttp": "Prüft, ob der Proxy einfaches HTTP weiterleitet. Muss mit 2xx antworten; Weiterleitungen zählen nicht, da ihnen nicht gefolgt wird. Leer lassen, um diese Prüfung zu überspringen.",
