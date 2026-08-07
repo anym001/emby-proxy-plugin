@@ -100,6 +100,27 @@ the other half of what makes a live language change work.
 Log message *prefixes* stay English so log lines remain greppable across installations, but embedded
 detail strings are localized, because the same text is shown in the dashboard.
 
+## The dashboard tile
+
+Without a tile the dashboard's plugin list falls back to a generic folder placeholder. Supplying one
+is opt-in through `MediaBrowser.Common.Plugins.IHasThumbImage`:
+
+```csharp
+Stream GetThumbImage();
+ImageFormat ThumbImageFormat { get; }   // MediaBrowser.Model.Drawing
+```
+
+Neither `BasePlugin` nor `BasePluginSimpleUI<T>` implements it — checked against the 4.9.5.0 metadata,
+they carry only `IPlugin`/`IPluginAssembly`, `IHasPluginConfiguration` and `IHasUIPages` — so `Plugin`
+declares the interface itself. `ImageFormat` accepts `Bmp | Gif | Jpg | Png | Webp | Avif`, and the
+declared value has to agree with the bytes actually handed back; nothing validates that at build time.
+
+`thumb.png` (640×360) is an embedded resource for the same reason as Harmony and the translations:
+installing stays a single file copy. Emby disposes the stream it is given, so `GetThumbImage` returns
+a fresh one per call rather than a cached instance. A missing resource yields `null`, which restores
+the placeholder instead of throwing — the tile is cosmetic and must not be able to break the plugin
+list.
+
 ## The default bypass list
 
 RFC1918, loopback and link-local, plus Emby's own endpoints. The latter are not guesswork; they were
@@ -213,13 +234,16 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 The workflow also triggers on `release: published`, because publishing a release through the GitHub
-UI (or the API) with a tag name that doesn't exist yet creates that tag through the Releases endpoint
-rather than a real push — that path emits a `release` event but never a `push` event, so `push: tags`
-alone never sees it and the tag is created with nothing built for it. On a `release` event
-`GITHUB_SHA`/`GITHUB_REF_NAME` resolve to the default branch tip, not the tag, so the checkout step
-and the tag-name resolution both read `github.event.release.tag_name` explicitly instead of trusting
-the ambient ref. Publishing a pre-existing tag as a release this way triggers both events for the same
-tag; the existing-release fallback below absorbs the duplicate run rather than failing.
+UI (or the API) for a tag that doesn't exist yet creates that tag through the Releases endpoint rather
+than a real push, and `push: tags` alone has been observed to miss that path entirely — no run at all,
+not even a failed one. Whether that path *also* fires a `push` event alongside `release` has proven
+inconsistent in practice, so `release: published` is the trigger this workflow actually relies on;
+`push: tags` stays for the plain `git push origin <tag>` path, which fires no `release` event at all.
+On a `release` event `GITHUB_SHA`/`GITHUB_REF_NAME` resolve to the default branch tip, not the tag, so
+the checkout step and the tag-name resolution both read `github.event.release.tag_name` explicitly
+instead of trusting the ambient ref. Both triggers can fire for the same tag - drafted then published,
+or published for an already-pushed tag; the existing-release fallback below absorbs the duplicate run
+rather than failing.
 
 If a release already exists for the tag — drafted in the UI beforehand, or the workflow re-run — the
 DLL is uploaded to it instead of the run failing.
@@ -328,6 +352,7 @@ lib/                                Target folder for the assemblies (not commit
 src/EmbyProxyRouter/
   Plugin.cs                   Entry point, dashboard status, server entry point
   PluginOptions.cs            Settings page (Emby.Web.GenericEdit)
+  thumb.png                   Tile shown in the dashboard's plugin list (embedded)
   Localization/en.json        Reference language (every key must exist here)
   Localization/de.json        German translation
   Localization/Localizer.cs   Language resolution and JSON lookup

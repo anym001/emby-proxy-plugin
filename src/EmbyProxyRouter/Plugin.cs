@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Emby.Web.GenericEdit.Elements;
@@ -7,7 +8,9 @@ using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Patch;
 using EmbyProxyRouter.Proxy;
 using MediaBrowser.Common;
+using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Logging;
 
 namespace EmbyProxyRouter
@@ -18,9 +21,12 @@ namespace EmbyProxyRouter
     /// <remarks>
     /// Scope is deliberately one thing. No metadata handling, no subtitle logic, no auto-update.
     /// </remarks>
-    public class Plugin : BasePluginSimpleUI<PluginOptions>
+    public class Plugin : BasePluginSimpleUI<PluginOptions>, IHasThumbImage
     {
         private static readonly Guid PluginId = new Guid("5f1c1b6e-9a3d-4d21-8f0a-2b7c6e4d91a3");
+
+        /// <summary>Logical name of the tile embedded by the csproj.</summary>
+        private const string ThumbResource = "EmbyProxyRouter.thumb.png";
 
         /// <summary>How long saving may block waiting for a reachability verdict.</summary>
         /// <remarks>
@@ -79,6 +85,26 @@ namespace EmbyProxyRouter
         public override Guid Id
         {
             get { return PluginId; }
+        }
+
+        public ImageFormat ThumbImageFormat
+        {
+            get { return ImageFormat.Png; }
+        }
+
+        /// <summary>
+        /// The tile Emby shows for this plugin in the dashboard's plugin list.
+        /// </summary>
+        /// <remarks>
+        /// Embedded in the DLL rather than deployed beside it, for the same reason as Harmony and
+        /// the translations: installing stays a single file copy. Emby disposes the stream it gets,
+        /// so this hands out a fresh one per call. A null return — the resource having gone missing
+        /// from the build — simply leaves the default placeholder in place, which is what the
+        /// dashboard showed before this existed.
+        /// </remarks>
+        public Stream GetThumbImage()
+        {
+            return typeof(Plugin).Assembly.GetManifestResourceStream(ThumbResource);
         }
 
         internal PluginOptions CurrentOptions
