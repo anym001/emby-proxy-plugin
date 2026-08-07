@@ -100,6 +100,27 @@ the other half of what makes a live language change work.
 Log message *prefixes* stay English so log lines remain greppable across installations, but embedded
 detail strings are localized, because the same text is shown in the dashboard.
 
+## The dashboard tile
+
+Without a tile the dashboard's plugin list falls back to a generic folder placeholder. Supplying one
+is opt-in through `MediaBrowser.Common.Plugins.IHasThumbImage`:
+
+```csharp
+Stream GetThumbImage();
+ImageFormat ThumbImageFormat { get; }   // MediaBrowser.Model.Drawing
+```
+
+Neither `BasePlugin` nor `BasePluginSimpleUI<T>` implements it — checked against the 4.9.5.0 metadata,
+they carry only `IPlugin`/`IPluginAssembly`, `IHasPluginConfiguration` and `IHasUIPages` — so `Plugin`
+declares the interface itself. `ImageFormat` accepts `Bmp | Gif | Jpg | Png | Webp | Avif`, and the
+declared value has to agree with the bytes actually handed back; nothing validates that at build time.
+
+`thumb.png` (640×360) is an embedded resource for the same reason as Harmony and the translations:
+installing stays a single file copy. Emby disposes the stream it is given, so `GetThumbImage` returns
+a fresh one per call rather than a cached instance. A missing resource yields `null`, which restores
+the placeholder instead of throwing — the tile is cosmetic and must not be able to break the plugin
+list.
+
 ## The default bypass list
 
 RFC1918, loopback and link-local, plus Emby's own endpoints. The latter are not guesswork; they were
@@ -331,6 +352,7 @@ lib/                                Target folder for the assemblies (not commit
 src/EmbyProxyRouter/
   Plugin.cs                   Entry point, dashboard status, server entry point
   PluginOptions.cs            Settings page (Emby.Web.GenericEdit)
+  thumb.png                   Tile shown in the dashboard's plugin list (embedded)
   Localization/en.json        Reference language (every key must exist here)
   Localization/de.json        German translation
   Localization/Localizer.cs   Language resolution and JSON lookup

@@ -80,6 +80,17 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!--
+    The tile Emby shows in the dashboard's plugin list. Embedded rather than shipped alongside, for
+    the same reason as everything else here: the deliverable is one DLL. The logical name is what
+    Plugin.GetThumbImage asks for - a mismatch resolves to null and silently keeps the placeholder.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="thumb.png">
+      <LogicalName>EmbyProxyRouter.thumb.png</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <Target Name="VerifyEmbyRefs" BeforeTargets="BeforeBuild">
     <Error Condition="!Exists('$(EmbyLibDir)\MediaBrowser.Controller.dll')"
            Text="Emby reference assemblies not found in '$(EmbyLibDir)'. Run build/fetch-emby-refs.sh first." />
