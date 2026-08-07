@@ -24,12 +24,21 @@ namespace EmbyProxyRouter.Proxy
 
         public int Port => Uri.Port;
 
-        public string Describe()
+        /// <summary>
+        /// Scheme, host, port and whether credentials are configured — never the password.
+        /// </summary>
+        /// <remarks>
+        /// Ends up embedded in a log line *and* in the reachability detail shown on the settings
+        /// page, so it is deferred like everything else with two audiences: the log renders it in
+        /// English, the page in the dashboard language.
+        /// </remarks>
+        public LocalizedText Describe()
         {
-            var auth = Credential == null
-                ? Localizer.Get("AuthNone")
-                : Localizer.Format("AuthAs", Credential.UserName);
-            return Uri.Scheme + "://" + Uri.Host + ":" + Uri.Port + " (" + auth + ")";
+            var authority = Uri.Scheme + "://" + Uri.Host + ":" + Uri.Port;
+
+            return Credential == null
+                ? LocalizedText.Of("DescribeNoAuth", authority)
+                : LocalizedText.Of("DescribeAuthAs", authority, Credential.UserName);
         }
 
         /// <summary>
@@ -52,14 +61,14 @@ namespace EmbyProxyRouter.Proxy
             string username,
             string password,
             out ProxyEndpoint endpoint,
-            out string error)
+            out LocalizedText error)
         {
             endpoint = null;
             error = null;
 
             if (string.IsNullOrWhiteSpace(address))
             {
-                error = Localizer.Get("ErrNoAddress");
+                error = LocalizedText.Of("ErrNoAddress");
                 return false;
             }
 
@@ -76,13 +85,13 @@ namespace EmbyProxyRouter.Proxy
                 Uri parsed;
                 if (!Uri.TryCreate(address, UriKind.Absolute, out parsed))
                 {
-                    error = Localizer.Format("ErrInvalidUrl", address);
+                    error = LocalizedText.Of("ErrInvalidUrl", address);
                     return false;
                 }
 
                 if (!TryMapScheme(parsed.Scheme, out scheme))
                 {
-                    error = Localizer.Format("ErrUnsupportedScheme", parsed.Scheme);
+                    error = LocalizedText.Of("ErrUnsupportedScheme", parsed.Scheme);
                     return false;
                 }
 
@@ -103,7 +112,7 @@ namespace EmbyProxyRouter.Proxy
                 var colon = address.LastIndexOf(':');
                 if (colon <= 0 || colon == address.Length - 1)
                 {
-                    error = Localizer.Get("ErrNeedPort");
+                    error = LocalizedText.Of("ErrNeedPort");
                     return false;
                 }
 
@@ -115,26 +124,26 @@ namespace EmbyProxyRouter.Proxy
                 var portText = address.Substring(colon + 1);
                 if (!int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out port))
                 {
-                    error = Localizer.Format("ErrPortNotNumber", portText);
+                    error = LocalizedText.Of("ErrPortNotNumber", portText);
                     return false;
                 }
             }
 
             if (string.IsNullOrWhiteSpace(host))
             {
-                error = Localizer.Get("ErrNoHost");
+                error = LocalizedText.Of("ErrNoHost");
                 return false;
             }
 
             if (port < 0)
             {
-                error = Localizer.Get("ErrNeedExplicitPort");
+                error = LocalizedText.Of("ErrNeedExplicitPort");
                 return false;
             }
 
             if (port < 1 || port > 65535)
             {
-                error = Localizer.Format("ErrPortRange", port);
+                error = LocalizedText.Of("ErrPortRange", port);
                 return false;
             }
 
@@ -149,7 +158,7 @@ namespace EmbyProxyRouter.Proxy
             }
             catch (Exception)
             {
-                error = Localizer.Format("ErrInvalidHost", host);
+                error = LocalizedText.Of("ErrInvalidHost", host);
                 return false;
             }
 

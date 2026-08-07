@@ -1,4 +1,5 @@
 using System;
+using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Proxy;
 using Xunit;
 
@@ -35,7 +36,7 @@ namespace EmbyProxyRouter.Tests
 
             if (health != ProxyHealth.Unknown)
             {
-                state.SetHealth(health, "test");
+                state.SetHealth(health, LocalizedText.Of("HealthTcpOnlyOk"));
             }
 
             return state;
@@ -140,11 +141,11 @@ namespace EmbyProxyRouter.Tests
             var proxy = new DynamicWebProxy(state);
 
             state.Apply(Settings(address: "socks5://first.example.com:1080"));
-            state.SetHealth(ProxyHealth.Reachable, "up");
+            state.SetHealth(ProxyHealth.Reachable, LocalizedText.Of("HealthTcpOnlyOk"));
             Assert.Equal("first.example.com", proxy.GetProxy(Public).Host);
 
             state.Apply(Settings(address: "http://second.example.com:8080"));
-            state.SetHealth(ProxyHealth.Reachable, "up");
+            state.SetHealth(ProxyHealth.Reachable, LocalizedText.Of("HealthTcpOnlyOk"));
 
             var resolved = proxy.GetProxy(Public);
             Assert.Equal("second.example.com", resolved.Host);

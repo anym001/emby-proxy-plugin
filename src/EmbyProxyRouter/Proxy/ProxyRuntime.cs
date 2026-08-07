@@ -58,14 +58,14 @@ namespace EmbyProxyRouter.Proxy
                 else if (settings.Endpoint == null)
                 {
                     Logger.Error("Proxy Router: enabled, but the configuration is invalid - " +
-                                 (settings.ConfigError ?? "unknown error") +
+                                 (settings.ConfigError != null ? settings.ConfigError.Invariant() : "unknown error") +
                                  (settings.FailOpen
                                      ? " | Fail-open: requests will go out directly."
                                      : " | Fail-closed: affected requests will be blocked."));
                 }
                 else
                 {
-                    Logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe() +
+                    Logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe().Invariant() +
                                 (settings.FailOpen ? " | fail-open" : " | fail-closed") +
                                 " | check interval " + (int)settings.HealthCheckInterval.TotalSeconds + " s");
                 }

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Proxy;
 using Xunit;
 
@@ -33,7 +34,7 @@ namespace EmbyProxyRouter.Tests
 
             if (health != ProxyHealth.Unknown)
             {
-                state.SetHealth(health, "test");
+                state.SetHealth(health, LocalizedText.Of("HealthTcpOnlyOk"));
             }
 
             return state;

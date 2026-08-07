@@ -1,5 +1,5 @@
 {
-  "_comment": "Deutsch. Fehlende Schluessel fallen automatisch auf en.json zurueck.",
+  "_comment": "Deutsch. Fehlende Schluessel fallen automatisch auf en.json zurueck. Schluessel mit dem Praefix 'Log' gehoeren ins Emby-Log und bleiben absichtlich englisch - sie duerfen hier nicht auftauchen.",
   "_languageName": "Deutsch",
 
   "EditorTitle": "Proxy Router",
@@ -76,19 +76,8 @@
   "HealthHttpStatus": "{0} antwortete mit HTTP {1}",
   "HealthUrlFailed": "{0} fehlgeschlagen: {1}",
 
-  "ReasonDisabled": "Proxy ist deaktiviert",
-  "ReasonMisconfigured": "Proxy ist aktiviert, aber fehlerhaft konfiguriert",
-  "ReasonBypassed": "Ziel steht auf der Bypass-Liste",
-  "ReasonReachable": "Proxy ist erreichbar",
-  "ReasonNotChecked": "Proxy-Status wurde noch nicht geprüft",
-  "ReasonUnreachable": "Proxy ist nicht erreichbar",
-
-  "BlockedMessage": "Proxy nicht erreichbar – Request blockiert: {0} ({1}). Fail-Closed ist aktiv.",
-  "FailOpenMessage": "Fail-Open aktiv – Request geht DIREKT raus, ohne Proxy: {0} ({1})",
-  "SuppressedSuffix": " [+{0} gleichartige in den letzten {1} s]",
-
-  "AuthNone": "ohne Auth",
-  "AuthAs": "Auth als {0}",
+  "DescribeNoAuth": "{0} (ohne Auth)",
+  "DescribeAuthAs": "{0} (Auth als {1})",
 
   "ErrNoAddress": "Keine Proxy-Adresse konfiguriert.",
   "ErrInvalidUrl": "Proxy-Adresse ist keine gültige URL: {0}",

@@ -74,8 +74,14 @@ namespace EmbyProxyRouter.Proxy
             get { return Volatile.Read(ref _snapshot).CheckedUtc; }
         }
 
-        /// <summary>The detail text of the last check, or null when none has completed.</summary>
-        public string LastCheckDetail
+        /// <summary>The detail of the last check, or null when none has completed.</summary>
+        /// <remarks>
+        /// Deferred rather than rendered, because it has two audiences: the settings page shows it
+        /// in the dashboard language, the log writes it in English. Keeping it unrendered also means
+        /// switching the display language re-renders the detail already on the page, instead of
+        /// leaving the previous language's text there until the next check overwrites it.
+        /// </remarks>
+        public LocalizedText LastCheckDetail
         {
             get { return Volatile.Read(ref _snapshot).Detail; }
         }
@@ -91,7 +97,7 @@ namespace EmbyProxyRouter.Proxy
         }
 
         /// <summary>Returns true when the health value changed.</summary>
-        public bool SetHealth(ProxyHealth health, string detail)
+        public bool SetHealth(ProxyHealth health, LocalizedText detail)
         {
             var previous = Interlocked.Exchange(
                 ref _snapshot, new HealthSnapshot(health, DateTime.UtcNow, detail));
@@ -168,37 +174,42 @@ namespace EmbyProxyRouter.Proxy
         }
 
         /// <summary>
-        /// Renders a <see cref="RouteReason"/> in the dashboard language.
+        /// Renders a <see cref="RouteReason"/> in English, for the log.
         /// </summary>
         /// <remarks>
         /// Lives beside <see cref="Decide"/> rather than at the call site so that the verdict and its
         /// explanation cannot drift apart — adding a reason without a message would not compile past
         /// the switch below. <paramref name="settings"/> must be the same snapshot the verdict came
         /// from, because <see cref="RouteReason.Misconfigured"/> quotes the parse error out of it.
+        ///
+        /// English unconditionally: the only caller is <see cref="ProxyGateHandler"/>, and everything
+        /// it produces goes to the Emby log or into an exception message crossing back into Emby.
+        /// Neither is read in the dashboard language, so both resolve through
+        /// <see cref="Localizer.GetInvariant"/> and the keys live only in en.json.
         /// </remarks>
         public static string Explain(RouteReason reason, ProxySettings settings)
         {
             switch (reason)
             {
                 case RouteReason.Disabled:
-                    return Localizer.Get("ReasonDisabled");
+                    return Localizer.GetInvariant("LogReasonDisabled");
 
                 case RouteReason.Misconfigured:
                     var detail = settings == null ? null : settings.ConfigError;
-                    return Localizer.Get("ReasonMisconfigured") +
-                           (detail != null ? ": " + detail : string.Empty);
+                    return Localizer.GetInvariant("LogReasonMisconfigured") +
+                           (detail != null ? ": " + detail.Invariant() : string.Empty);
 
                 case RouteReason.Bypassed:
-                    return Localizer.Get("ReasonBypassed");
+                    return Localizer.GetInvariant("LogReasonBypassed");
 
                 case RouteReason.ProxyReachable:
-                    return Localizer.Get("ReasonReachable");
+                    return Localizer.GetInvariant("LogReasonReachable");
 
                 case RouteReason.ProxyNotChecked:
-                    return Localizer.Get("ReasonNotChecked");
+                    return Localizer.GetInvariant("LogReasonNotChecked");
 
                 default:
-                    return Localizer.Get("ReasonUnreachable");
+                    return Localizer.GetInvariant("LogReasonUnreachable");
             }
         }
 
@@ -217,7 +228,7 @@ namespace EmbyProxyRouter.Proxy
             public static readonly HealthSnapshot NotChecked =
                 new HealthSnapshot(ProxyHealth.Unknown, null, null);
 
-            public HealthSnapshot(ProxyHealth health, DateTime? checkedUtc, string detail)
+            public HealthSnapshot(ProxyHealth health, DateTime? checkedUtc, LocalizedText detail)
             {
                 Health = health;
                 CheckedUtc = checkedUtc;
@@ -228,7 +239,7 @@ namespace EmbyProxyRouter.Proxy
 
             public DateTime? CheckedUtc { get; private set; }
 
-            public string Detail { get; private set; }
+            public LocalizedText Detail { get; private set; }
         }
     }
 }

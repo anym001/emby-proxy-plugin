@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EmbyProxyRouter.Localization;
 
 namespace EmbyProxyRouter.Proxy
 {
@@ -19,7 +20,11 @@ namespace EmbyProxyRouter.Proxy
         public ProxyEndpoint Endpoint { get; private set; }
 
         /// <summary>Non-null when the configured address could not be parsed.</summary>
-        public string ConfigError { get; private set; }
+        /// <remarks>
+        /// Deferred rather than rendered: it is reported on the settings page in the dashboard
+        /// language and written to the log in English.
+        /// </remarks>
+        public LocalizedText ConfigError { get; private set; }
 
         public BypassRules Bypass { get; private set; }
 
@@ -88,7 +93,7 @@ namespace EmbyProxyRouter.Proxy
             };
 
             ProxyEndpoint endpoint;
-            string error;
+            LocalizedText error;
             if (ProxyEndpoint.TryParse(
                     options.ProxyAddress, options.Scheme, options.Username, options.Password,
                     out endpoint, out error))

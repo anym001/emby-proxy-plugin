@@ -1,3 +1,4 @@
+using EmbyProxyRouter.Localization;
 using EmbyProxyRouter.Proxy;
 using Xunit;
 
@@ -7,7 +8,7 @@ namespace EmbyProxyRouter.Tests
     {
         private static bool TryParse(string address, ProxyScheme scheme, out ProxyEndpoint endpoint)
         {
-            string error;
+            LocalizedText error;
             return ProxyEndpoint.TryParse(address, scheme, null, null, out endpoint, out error);
         }
 
@@ -84,13 +85,14 @@ namespace EmbyProxyRouter.Tests
         public void AnUnusableHostReturnsFalseRatherThanThrowing(string address)
         {
             ProxyEndpoint endpoint;
-            string error;
+            LocalizedText error;
             var ok = ProxyEndpoint.TryParse(
                 address, ProxyScheme.Http, null, null, out endpoint, out error);
 
             Assert.False(ok);
             Assert.Null(endpoint);
-            Assert.False(string.IsNullOrEmpty(error));
+            Assert.NotNull(error);
+            Assert.False(string.IsNullOrEmpty(error.Invariant()));
         }
 
         [Theory]
@@ -138,7 +140,7 @@ namespace EmbyProxyRouter.Tests
         public void UserInfoIsMovedOutOfTheUriIntoTheCredential()
         {
             ProxyEndpoint endpoint;
-            string error;
+            LocalizedText error;
             Assert.True(ProxyEndpoint.TryParse(
                 "socks5://alice:s3cret@proxy.example.com:1080",
                 ProxyScheme.Http, null, null, out endpoint, out error));
@@ -153,7 +155,7 @@ namespace EmbyProxyRouter.Tests
         public void TheExplicitUsernameFieldBeatsUserInfoInTheUrl()
         {
             ProxyEndpoint endpoint;
-            string error;
+            LocalizedText error;
             Assert.True(ProxyEndpoint.TryParse(
                 "socks5://fromurl:fromurl@proxy.example.com:1080",
                 ProxyScheme.Http, "fromfield", "fieldpass", out endpoint, out error));
@@ -174,7 +176,7 @@ namespace EmbyProxyRouter.Tests
         public void UserInfoWithAPortIsStillParsedAsAPort()
         {
             ProxyEndpoint endpoint;
-            string error;
+            LocalizedText error;
             Assert.True(ProxyEndpoint.TryParse(
                 "http://alice:s3cret@proxy.example.com:8080",
                 ProxyScheme.Http, null, null, out endpoint, out error));
@@ -212,15 +214,19 @@ namespace EmbyProxyRouter.Tests
         public void DescribeNamesTheUserButNeverThePassword()
         {
             ProxyEndpoint endpoint;
-            string error;
+            LocalizedText error;
             Assert.True(ProxyEndpoint.TryParse(
                 "socks5://proxy.example.com:1080",
                 ProxyScheme.Http, "alice", "s3cret", out endpoint, out error));
 
-            var described = endpoint.Describe();
-
-            Assert.Contains("alice", described);
-            Assert.DoesNotContain("s3cret", described);
+            // Both renderings reach a reader: the log takes the English one, the settings page the
+            // localized one. Neither may carry the password.
+            foreach (var described in new[] { endpoint.Describe().Invariant(), endpoint.Describe().Localized() })
+            {
+                Assert.Contains("alice", described);
+                Assert.Contains("proxy.example.com:1080", described);
+                Assert.DoesNotContain("s3cret", described);
+            }
         }
     }
 }
