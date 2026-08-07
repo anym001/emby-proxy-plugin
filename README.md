@@ -33,12 +33,6 @@ This is intentional — the point of the project is a single, auditable responsi
 The Emby container usually maps a host directory to `/config`. Copy the plugin DLL into its
 `plugins` subfolder and restart the container.
 
-```bash
-cp EmbyProxyRouter.dll /mnt/user/appdata/emby/plugins/
-
-docker restart emby
-```
-
 Then configure it in the dashboard under **Plugins → Proxy Router**.
 
 A ready-built DLL is attached to every [release](../../releases); building it yourself is described
