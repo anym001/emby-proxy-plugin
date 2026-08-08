@@ -9,13 +9,13 @@
   "LabelPatchStatus": "Patch status",
 
   "LabelEnableProxy": "Enable proxy",
-  "DescEnableProxy": "When disabled, the Emby core connects directly - including when HTTP_PROXY or HTTPS_PROXY is set in the environment. While this plugin is installed it decides where that traffic goes, whether it is switched on or not.",
+  "DescEnableProxy": "When off, Emby connects directly - even if HTTP_PROXY or HTTPS_PROXY is set in the environment.",
 
   "LabelScheme": "Proxy scheme",
   "DescScheme": "Only used when the proxy address does not carry a scheme of its own.",
 
   "LabelProxyAddress": "Proxy address",
-  "DescProxyAddress": "Either host:port (for example 192.168.1.10:8080) or a full URL (for example socks5://192.168.1.10:1080). Put credentials in the fields below - .NET ignores credentials embedded in the URL for SOCKS5.",
+  "DescProxyAddress": "host:port (for example 192.168.1.10:8080) or a full URL (for example socks5://192.168.1.10:1080). For SOCKS5, use the credential fields below - .NET ignores credentials embedded in the URL.",
 
   "LabelUsername": "Username",
   "DescUsername": "Optional. Takes precedence over credentials embedded in the URL.",
@@ -23,13 +23,13 @@
   "LabelPassword": "Password",
 
   "LabelIgnoreCert": "Ignore certificate validation",
-  "DescIgnoreCert": "Required for HTTPS proxies using a self-signed certificate. Only takes effect while the proxy is enabled and configured, but then it applies to every outbound connection the Emby core makes - the proxy itself, the destinations tunnelled through it, and the destinations that go out directly because they are on the bypass list.",
+  "DescIgnoreCert": "For HTTPS proxies with a self-signed certificate. Applies to every outbound connection while the proxy is enabled, including destinations on the bypass list.",
 
   "LabelBypassPrivate": "Bypass proxy for private networks",
-  "DescBypassPrivate": "OFF (default): everything goes through the proxy, including private networks. ON: private networks (10.x, 172.16-31.x, 192.168.x), link-local, IPv6 ULA and *.local are contacted directly instead. Switch this on if the server also talks to its own LAN - other Emby servers, DLNA endpoints, a local metadata cache - and you do not want that traffic crossing the proxy or dying with it. The server's own loopback address is never proxied either way.",
+  "DescBypassPrivate": "OFF (default): private networks also go through the proxy. ON: private ranges (10.x, 172.16-31.x, 192.168.x), link-local, IPv6 ULA and *.local are contacted directly. Loopback is always direct.",
 
   "LabelBypassList": "Bypass list",
-  "DescBypassList": "Additional entries, one per line. Accepts CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution is performed - hostnames are matched literally. Entries here are additional to whatever the switch above covers, and they apply even when it is off. Emby's licensing servers are not bypassed by default - add them here if you want them contacted directly.",
+  "DescBypassList": "One entry per line: CIDR (10.0.0.0/8), a single IP, a hostname, or a wildcard (*.example.com). No DNS resolution - hostnames are matched literally. Applies regardless of the switch above. Emby's licensing servers are not bypassed by default.",
 
   "PatchCaption": "Patch",
   "PatchActive": "Active - Emby core traffic passes through this plugin.",
