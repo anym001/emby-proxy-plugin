@@ -29,7 +29,7 @@
   "DescBypassPrivate": "AUS (Standard): private Netze laufen ebenfalls über den Proxy. EIN: private Bereiche (10.x, 172.16-31.x, 192.168.x), Link-Local, IPv6-ULA und *.local werden direkt angesprochen. Loopback läuft immer direkt.",
 
   "LabelBypassList": "Bypass-Liste",
-  "DescBypassList": "Ein Eintrag pro Zeile: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Keine DNS-Auflösung – Hostnamen werden literal verglichen. Gilt unabhängig vom Schalter darüber. Embys Lizenzserver werden standardmäßig nicht umgangen.",
+  "DescBypassList": "Ein Eintrag pro Zeile: CIDR (10.0.0.0/8), einzelne IP, Hostname oder Wildcard (*.example.com). Keine DNS-Auflösung – Hostnamen werden literal verglichen. Gilt unabhängig vom Schalter darüber.",
 
   "PatchCaption": "Patch",
   "PatchActive": "Aktiv – Traffic des Emby-Kerns läuft über dieses Plugin.",
