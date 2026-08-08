@@ -356,10 +356,17 @@ pull request would have rejected.
 
 `tests/EmbyProxyRouter.Tests` (xUnit, `net8.0`) covers what is decidable without a server, which is
 most of the logic that has actually been wrong: `ProxyEndpoint.TryParse`, `BypassRules`,
-`ProxyState.Decide` and `Explain`, `DynamicWebProxy`, `ProxyGateHandler` against a stub inner
-handler and a recording logger, `HttpHandlerPatch.Decorate` reached by reflection, `LogThrottle`,
-`ProxyProbe` against an in-process SOCKS5 server, and `ProxySettings`. Apart from that server on a
-loopback port, all of it is pure functions over their inputs — no Emby host, no Harmony.
+`DynamicWebProxy`, `ProxyGateHandler` against a stub inner handler and a recording logger,
+`HttpHandlerPatch.Decorate` and `Configure` reached by reflection — the latter for the
+"ignore certificate validation" option — `LogThrottle`, `ProxyProbe` against an in-process SOCKS5
+server, `ProxySettings`, and the log-language rule (`LogLanguageTests` fails the build if a `Log*`
+key turns up in a language file other than `en.json`). Apart from that server on a loopback port,
+all of it is pure functions over their inputs — no Emby host, no Harmony.
+
+`ProxyState.Decide` and `Explain` have no test class of their own. They are exercised through
+`DynamicWebProxy` and `ProxyGateHandler`, which is deliberate: those two are the callers that must
+never reach different verdicts for the same destination, so testing them is what pins the property
+that matters.
 
 It references the plugin project and, unlike the plugin, copies the Emby assemblies into its own
 output with `Private=true`: a test host has no server to supply them. `lib/` still has to be

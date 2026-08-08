@@ -83,9 +83,12 @@ has changed before. A non-matching Harmony postfix fails **silently** — it nev
 plugin looks installed while routing nothing.
 
 `tests/EmbyProxyRouter.Tests` is an xUnit project covering the parts that are decidable without a
-server: `ProxyEndpoint.TryParse`, `BypassRules`, `ProxyState.Decide`, `DynamicWebProxy`,
-`ProxyGateHandler` against a stub inner handler, `HttpHandlerPatch.Decorate` and `Configure` reached
-by reflection, `LogThrottle`, `ProxyProbe` against an in-process SOCKS5 server, and `ProxySettings`.
+server: `ProxyEndpoint.TryParse`, `BypassRules`, `DynamicWebProxy`, `ProxyGateHandler` against a
+stub inner handler, `HttpHandlerPatch.Decorate` and `Configure` reached by reflection (the latter
+for the certificate-validation option), `LogThrottle`, `ProxyProbe` against an in-process SOCKS5
+server, `ProxySettings`, and the log-language rule below. `ProxyState.Decide` has no test class of
+its own — it is exercised through `DynamicWebProxy` and the gate, which are the two callers that
+have to agree with it.
 It references the plugin project and copies the Emby assemblies into its own output, since a test
 host has no server to supply them. Add cases there when you touch any of those.
 
