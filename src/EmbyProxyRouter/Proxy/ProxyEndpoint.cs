@@ -246,20 +246,8 @@ namespace EmbyProxyRouter.Proxy
                 return address;
             }
 
-            var schemeEnd = address.IndexOf("://", StringComparison.Ordinal);
-            var start = schemeEnd < 0 ? 0 : schemeEnd + 3;
-            if (start >= address.Length)
-            {
-                return address;
-            }
-
-            var end = address.IndexOfAny(new[] { '/', '?', '#' }, start);
-            if (end < 0)
-            {
-                end = address.Length;
-            }
-
-            var authority = address.Substring(start, end - start);
+            int start;
+            var authority = Authority(address, out start);
 
             var at = authority.LastIndexOf('@');
             if (at < 0)
@@ -292,19 +280,7 @@ namespace EmbyProxyRouter.Proxy
         /// </remarks>
         private static bool AuthorityHasPort(string address)
         {
-            var start = address.IndexOf("://", StringComparison.Ordinal) + 3;
-            if (start >= address.Length)
-            {
-                return false;
-            }
-
-            var authority = address.Substring(start);
-
-            var end = authority.IndexOfAny(new[] { '/', '?', '#' });
-            if (end >= 0)
-            {
-                authority = authority.Substring(0, end);
-            }
+            var authority = Authority(address, out _);
 
             var at = authority.LastIndexOf('@');
             if (at >= 0)
@@ -322,6 +298,34 @@ namespace EmbyProxyRouter.Proxy
             // address rather than introducing a port.
             var bracket = authority.LastIndexOf(']');
             return colon > bracket;
+        }
+
+        /// <summary>
+        /// The authority of <paramref name="address"/>, and the offset it begins at.
+        /// </summary>
+        /// <remarks>
+        /// Textual, because both callers run on input <see cref="Uri"/> either refused or has not
+        /// been asked about yet, so there is no parsed form to interrogate. Shared between them
+        /// because they need the same three answers — where the scheme ends, where the path begins,
+        /// and therefore what lies in between — and two copies of that are two things to keep in
+        /// step. <paramref name="start"/> is what lets <see cref="Redact"/> rebuild the address
+        /// around the part it masks.
+        ///
+        /// An address with no <c>://</c> is all authority, which is the host:port form; one that is
+        /// nothing but a scheme yields the empty string, and both callers treat that as "nothing
+        /// here", which is the same answer they gave before.
+        /// </remarks>
+        private static string Authority(string address, out int start)
+        {
+            var schemeEnd = address.IndexOf("://", StringComparison.Ordinal);
+            start = schemeEnd < 0 ? 0 : schemeEnd + 3;
+            if (start >= address.Length)
+            {
+                return string.Empty;
+            }
+
+            var end = address.IndexOfAny(new[] { '/', '?', '#' }, start);
+            return end < 0 ? address.Substring(start) : address.Substring(start, end - start);
         }
 
         private static bool TryMapScheme(string value, out ProxyScheme scheme)
