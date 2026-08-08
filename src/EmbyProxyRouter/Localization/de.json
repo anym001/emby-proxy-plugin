@@ -9,7 +9,7 @@
   "LabelPatchStatus": "Patch-Status",
 
   "LabelEnableProxy": "Proxy aktivieren",
-  "DescEnableProxy": "Wenn deaktiviert, verhält sich Emby exakt wie ohne dieses Plugin.",
+  "DescEnableProxy": "Wenn deaktiviert, verbindet sich der Emby-Kern direkt – auch dann, wenn HTTP_PROXY oder HTTPS_PROXY in der Umgebung gesetzt ist. Solange dieses Plugin installiert ist, bestimmt es diesen Traffic, ob es eingeschaltet ist oder nicht.",
 
   "LabelScheme": "Proxy-Schema",
   "DescScheme": "Wird nur verwendet, wenn die Proxy-Adresse kein eigenes Schema enthält.",

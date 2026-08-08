@@ -172,6 +172,12 @@ English. Pull requests with translations are welcome — see [CONTRIBUTING.md](C
   the bypass list. Only enable it when the proxy uses a self-signed certificate.
 * **Credentials are stored in plain text.** Emby persists plugin options as JSON under
   `/config/plugins/configurations/`. The password field is masked in the UI, not in the file.
+* **An installed plugin decides the route even when it is switched off.** Emby's handlers are built
+  once and cached for the life of the process, so the plugin has to attach itself to every one of
+  them whether or not the proxy is enabled. With it disabled that means a direct connection — and a
+  proxy configured in the environment (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`), which .NET would
+  otherwise honour, is not used. If you want the environment's proxy back, remove the plugin rather
+  than disabling it.
 * **Bound to an internal Emby method.** The patched method is not public API, so an Emby update can
   change it. The plugin verifies it at startup and reports a mismatch, but cannot repair one.
 * **Emby Premiere validation depends on the proxy.** Licence traffic goes through it, so an
