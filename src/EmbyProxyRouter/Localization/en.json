@@ -9,7 +9,7 @@
   "LabelPatchStatus": "Patch status",
 
   "LabelEnableProxy": "Enable proxy",
-  "DescEnableProxy": "When disabled, Emby behaves exactly as it would without this plugin.",
+  "DescEnableProxy": "When disabled, the Emby core connects directly - including when HTTP_PROXY or HTTPS_PROXY is set in the environment. While this plugin is installed it decides where that traffic goes, whether it is switched on or not.",
 
   "LabelScheme": "Proxy scheme",
   "DescScheme": "Only used when the proxy address does not carry a scheme of its own.",
@@ -33,7 +33,7 @@
 
   "PatchCaption": "Patch",
   "PatchActive": "Active - Emby core traffic passes through this plugin.",
-  "PatchDegraded": "Active, but the proxy could not be attached to at least one HTTP handler: {0} Those requests are blocked rather than sent unproxied, but they do not go through the proxy. Restarting the server usually clears this.",
+  "PatchDegraded": "Active, but the proxy could not be attached to at least one HTTP handler: {0} Requests on that handler are refused rather than sent unproxied, so nothing escapes - but they do not reach the proxy either, and they will keep failing. Restarting the server usually clears this.",
   "PatchInactive": "NOT active - {0} No traffic is being redirected.",
   "UnknownError": "unknown error",
 
@@ -67,6 +67,7 @@
   "LogReasonMisconfigured": "proxy is enabled but misconfigured",
   "LogReasonBypassed": "destination is on the bypass list",
   "LogReasonProxied": "destination goes through the proxy",
+  "LogReasonNotAttached": "the proxy could not be attached to this HTTP handler",
 
   "LogBlocked": "Request blocked, no usable proxy: {0} ({1})",
   "LogSuppressed": " [+{0} identical in the last {1} s]",
@@ -78,7 +79,7 @@
   "ErrInvalidUrl": "Proxy address is not a valid URL: {0}",
   "ErrUnsupportedScheme": "Unsupported proxy scheme '{0}'. Supported schemes are http, https and socks5.",
   "ErrNeedPort": "Proxy address needs a port, for example 192.168.1.10:8080 or socks5://192.168.1.10:1080",
-  "ErrPortNotNumber": "Proxy port is not a number: {0}",
+  "ErrPortNotNumber": "The text after the last colon in the proxy address is not a port number. Write it as host:port, for example 192.168.1.10:8080",
   "ErrNoHost": "Proxy address contains no host.",
   "ErrUserInfoNeedsScheme": "The proxy address carries credentials but no scheme. Write it as http://user:password@192.168.1.10:8080, or leave the credentials out of the address and use the username and password fields.",
   "ErrInvalidHost": "Proxy address contains an invalid host: {0}",

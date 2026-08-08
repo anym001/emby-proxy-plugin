@@ -77,20 +77,38 @@ namespace EmbyProxyRouter.Patch
         private static DynamicWebProxy _proxy;
         private static ILogger _logger;
 
-        public static bool IsApplied { get; private set; }
+        // Written from whichever thread Emby happens to build a handler on and read by the settings
+        // page on another, so the reads are declared volatile rather than left to chance. Backing
+        // fields because an auto-property cannot be.
+        private static volatile bool _isApplied;
+        private static volatile string _failureReason;
+        private static volatile string _decorationFailureReason;
 
-        public static string FailureReason { get; private set; }
+        public static bool IsApplied
+        {
+            get { return _isApplied; }
+        }
+
+        public static string FailureReason
+        {
+            get { return _failureReason; }
+        }
 
         /// <summary>
-        /// Set when the postfix ran but could not configure a handler it was handed.
+        /// Set when the postfix ran but could not attach the proxy to a handler it was handed.
         /// </summary>
         /// <remarks>
         /// Distinct from <see cref="FailureReason"/>, which means the patch never applied at all.
-        /// This is the in-between state: Emby is calling us, the gate is in place, but
-        /// at least one handler is not carrying the proxy. That has to reach the dashboard. Reporting
-        /// only "Active" would tell the user their traffic is routed while some of it is not.
+        /// This is the in-between state: Emby is calling us, the gate is in place, but at least one
+        /// handler is not carrying the proxy. Requests on that handler are refused by the gate
+        /// rather than sent out unproxied, so nothing leaks — but they do not reach the proxy
+        /// either, and that has to reach the dashboard. Reporting plain "Active" would tell the user
+        /// their traffic is routed while some of it is failing.
         /// </remarks>
-        public static string DecorationFailureReason { get; private set; }
+        public static string DecorationFailureReason
+        {
+            get { return _decorationFailureReason; }
+        }
 
         public static void Apply(ILogger logger, ProxyState state, DynamicWebProxy proxy)
         {
@@ -106,8 +124,8 @@ namespace EmbyProxyRouter.Patch
             }
             catch (Exception ex)
             {
-                IsApplied = false;
-                FailureReason = ex.GetBaseException().Message;
+                _isApplied = false;
+                _failureReason = ex.GetBaseException().Message;
                 logger.ErrorException(
                     "Harmony patch failed - outbound traffic is NOT being routed through the proxy.",
                     ex);
@@ -170,8 +188,8 @@ namespace EmbyProxyRouter.Patch
             var harmony = new Harmony(HarmonyId);
             harmony.Patch(target, postfix: new HarmonyMethod(postfix));
 
-            IsApplied = true;
-            FailureReason = null;
+            _isApplied = true;
+            _failureReason = null;
             logger.Info("Harmony patch active on " + Describe(target) +
                         " (Emby.Server.Implementations " + assembly.GetName().Version + ").");
         }
@@ -185,8 +203,8 @@ namespace EmbyProxyRouter.Patch
 
         private static void Fail(ILogger logger, string reason)
         {
-            IsApplied = false;
-            FailureReason = reason;
+            _isApplied = false;
+            _failureReason = reason;
             logger.Error("Harmony patch NOT applied: " + reason +
                          " Outbound traffic is not being routed through the proxy.");
         }
@@ -206,7 +224,7 @@ namespace EmbyProxyRouter.Patch
                 // Last resort. Decorate already handles the failure it can anticipate and still
                 // returns a gated handler; reaching here means something unforeseen, and breaking
                 // Emby's HTTP stack outright would be worse than leaving the handler untouched.
-                DecorationFailureReason = ex.GetBaseException().Message;
+                _decorationFailureReason = ex.GetBaseException().Message;
                 if (_logger != null)
                 {
                     _logger.ErrorException("The proxy could not be applied to the HTTP handler.", ex);
@@ -223,7 +241,13 @@ namespace EmbyProxyRouter.Patch
         /// already been used throws — while wrapping it cannot. Letting a failure in the first half
         /// skip the second would hand back a bare handler with neither a proxy nor a gate — every
         /// request on it going out in the clear, which is the one outcome this plugin exists to
-        /// prevent. So the gate goes on either way, and the failure is recorded for the dashboard.
+        /// prevent. So the gate goes on either way.
+        ///
+        /// The gate is also told which of the two it is wrapping. A gate that only knew about the
+        /// unparseable-address verdict would pass these requests straight through to a handler with
+        /// no proxy on it, which is the same leak reached from the other end: the routing verdict
+        /// says "via the proxy" and there is no proxy to go via. Whether the attach succeeded is
+        /// settled here, once, and cannot change afterwards.
         /// </remarks>
         private static HttpMessageHandler Decorate(HttpMessageHandler handler)
         {
@@ -232,25 +256,28 @@ namespace EmbyProxyRouter.Patch
                 return null;
             }
 
+            bool proxyAttached;
             try
             {
-                Configure(handler);
+                proxyAttached = Configure(handler);
             }
             catch (Exception ex)
             {
-                DecorationFailureReason = ex.GetBaseException().Message;
+                proxyAttached = false;
+                _decorationFailureReason = ex.GetBaseException().Message;
                 if (_logger != null)
                 {
                     _logger.ErrorException(
                         "The proxy could not be applied to an HTTP handler. The gate is still in " +
-                        "place, but requests on this handler will not use the proxy.", ex);
+                        "place and will refuse requests on it rather than send them unproxied.", ex);
                 }
             }
 
-            return new ProxyGateHandler(handler, _state, _logger, Throttle);
+            return new ProxyGateHandler(handler, _state, _logger, Throttle, proxyAttached);
         }
 
-        private static void Configure(HttpMessageHandler handler)
+        /// <summary>Returns whether the handler came away carrying the proxy.</summary>
+        private static bool Configure(HttpMessageHandler handler)
         {
             var sockets = handler as SocketsHttpHandler;
             if (sockets != null)
@@ -260,28 +287,42 @@ namespace EmbyProxyRouter.Patch
                 sockets.ConnectTimeout = ConnectTimeout;
 
                 ApplyCertificatePolicy(sockets);
+                return true;
             }
-            else
+
+            // Defensive: should not happen on 4.9.5.0, but a future build could return something
+            // else. HttpClientHandler cannot do SOCKS5 — say so rather than fail quietly.
+            var legacy = handler as HttpClientHandler;
+            if (legacy != null)
             {
-                // Defensive: should not happen on 4.9.5.0, but a future build could return something
-                // else. HttpClientHandler cannot do SOCKS5 — say so rather than fail quietly.
-                var legacy = handler as HttpClientHandler;
-                if (legacy != null)
+                legacy.Proxy = _proxy;
+                legacy.UseProxy = true;
+
+                // One snapshot: reading Settings twice around a save could pair the handler type
+                // with an endpoint from a different configuration.
+                var endpoint = _state.Settings.Endpoint;
+                if (_logger != null && endpoint != null && endpoint.IsSocks)
                 {
-                    legacy.Proxy = _proxy;
-                    legacy.UseProxy = true;
-                    if (_logger != null && _state.Settings.Endpoint != null && _state.Settings.Endpoint.IsSocks)
-                    {
-                        _logger.Error("Emby returned an HttpClientHandler instead of a SocketsHttpHandler. " +
-                                      "SOCKS5 is NOT supported by that handler type.");
-                    }
+                    _logger.Error("Emby returned an HttpClientHandler instead of a SocketsHttpHandler. " +
+                                  "SOCKS5 is NOT supported by that handler type.");
                 }
-                else if (_logger != null)
-                {
-                    _logger.Warn("Unknown handler type '" + handler.GetType().FullName +
-                                 "' - only the gate will be applied.");
-                }
+
+                return true;
             }
+
+            // Nothing here can attach a proxy to a handler of unknown shape, so the gate has to
+            // refuse for it. Recorded rather than only logged: the dashboard is where someone finds
+            // out why their requests are failing.
+            _decorationFailureReason =
+                "Emby returned an unsupported HTTP handler type '" + handler.GetType().FullName + "'.";
+            if (_logger != null)
+            {
+                _logger.Warn("Unknown handler type '" + handler.GetType().FullName +
+                             "' - the proxy cannot be attached to it, so the gate will refuse " +
+                             "requests on it rather than let them out unproxied.");
+            }
+
+            return false;
         }
 
         /// <summary>

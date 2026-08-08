@@ -101,7 +101,8 @@ namespace EmbyProxyRouter.Tests
                      {
                          "LogBlocked", "LogSuppressed",
                          "LogReasonDisabled", "LogReasonMisconfigured",
-                         "LogReasonBypassed", "LogReasonProxied"
+                         "LogReasonBypassed", "LogReasonProxied",
+                         "LogReasonNotAttached"
                      })
             {
                 Assert.True(english.ContainsKey(key), "en.json is missing " + key);
@@ -240,7 +241,7 @@ namespace EmbyProxyRouter.Tests
 
                 var logger = new RecordingLogger();
                 using (var invoker = new HttpMessageInvoker(
-                           new ProxyGateHandler(new StubHandler(), state, logger, null)))
+                           new ProxyGateHandler(new StubHandler(), state, logger, null, true)))
                 using (var request = new HttpRequestMessage(HttpMethod.Get, "https://api.themoviedb.org/x"))
                 {
                     string failure = null;

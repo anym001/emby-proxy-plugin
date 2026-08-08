@@ -46,7 +46,7 @@ namespace EmbyProxyRouter.Localization
         /// <summary>
         /// The language code currently in effect, derived from Emby's display language.
         /// </summary>
-        public static string CurrentCode
+        internal static string CurrentCode
         {
             get
             {

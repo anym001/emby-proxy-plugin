@@ -62,7 +62,7 @@ namespace EmbyProxyRouter.Tests
             var logger = new RecordingLogger();
 
             using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, StateWith(address: "nonsense"), logger, null)))
+                       new ProxyGateHandler(inner, StateWith(address: "nonsense"), logger, null, true)))
             {
                 var error = await SendAsync(invoker, Destination);
 
@@ -79,7 +79,7 @@ namespace EmbyProxyRouter.Tests
         public async Task ABlockedRequestCarriesTheReason()
         {
             using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
-                       new StubHandler(), StateWith(address: "nonsense"), new RecordingLogger(), null)))
+                       new StubHandler(), StateWith(address: "nonsense"), new RecordingLogger(), null, true)))
             {
                 var error = await SendAsync(invoker, Destination);
                 Assert.Contains("misconfigured", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -90,7 +90,7 @@ namespace EmbyProxyRouter.Tests
 
         [Theory]
         [InlineData(true, "socks5://proxy.example.com:1080", Destination)]   // routed via the proxy
-        [InlineData(true, "socks5://proxy.example.com:1080", "http://192.168.1.50:8096/")] // bypassed
+        [InlineData(true, "socks5://proxy.example.com:1080", "http://127.0.0.1:8096/")] // bypassed
         [InlineData(false, "socks5://proxy.example.com:1080", Destination)]  // plugin switched off
         public async Task EverythingElseReachesTheInnerHandler(bool enabled, string address, string url)
         {
@@ -98,7 +98,7 @@ namespace EmbyProxyRouter.Tests
             var logger = new RecordingLogger();
 
             using (var invoker = new HttpMessageInvoker(
-                       new ProxyGateHandler(inner, StateWith(enabled, address), logger, null)))
+                       new ProxyGateHandler(inner, StateWith(enabled, address), logger, null, true)))
             {
                 Assert.Null(await SendAsync(invoker, url));
                 Assert.Equal(1, inner.Calls);
@@ -119,10 +119,75 @@ namespace EmbyProxyRouter.Tests
             var inner = new StubHandler();
 
             using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
-                       inner, StateWith(enabled: false, address: "nonsense"), new RecordingLogger(), null)))
+                       inner, StateWith(enabled: false, address: "nonsense"), new RecordingLogger(), null, true)))
             {
                 Assert.Null(await SendAsync(invoker, Destination));
                 Assert.Equal(1, inner.Calls);
+            }
+        }
+
+        // --- A handler that never received the proxy ----------------------------------------------
+
+        /// <summary>
+        /// Regression: the gate used to pass these straight through to a handler with no proxy.
+        /// </summary>
+        /// <remarks>
+        /// The verdict is <c>ViaProxy</c> and the address is perfectly good, so the block the gate
+        /// was originally built for never fired — and the inner handler, which failed to take the
+        /// proxy, sent the request straight out. Same leak as the unparseable address, reached from
+        /// the other end: routing says "via the proxy" and there is no proxy to go via.
+        /// </remarks>
+        [Fact]
+        public async Task AHandlerThatNeverReceivedTheProxyRefusesWhatWouldHaveUsedIt()
+        {
+            var inner = new StubHandler();
+            var logger = new RecordingLogger();
+
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       inner, StateWith(), logger, null, proxyAttached: false)))
+            {
+                var error = await SendAsync(invoker, Destination);
+
+                Assert.IsType<HttpRequestException>(error);
+                Assert.Equal(0, inner.Calls);
+                Assert.Single(logger.Errors);
+            }
+        }
+
+        /// <summary>
+        /// And it says which of the two refusals it was, because the fix is a different one.
+        /// </summary>
+        [Fact]
+        public async Task ThatRefusalNamesTheHandlerRatherThanTheConfiguration()
+        {
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       new StubHandler(), StateWith(), new RecordingLogger(), null, proxyAttached: false)))
+            {
+                var error = await SendAsync(invoker, Destination);
+
+                Assert.Contains("could not be attached", error.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("misconfigured", error.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        /// <summary>
+        /// It refuses only what would have used the proxy. A destination that was going out directly
+        /// anyway is unaffected — the handler missing a proxy costs it nothing.
+        /// </summary>
+        [Theory]
+        [InlineData(true, "http://127.0.0.1:8096/")]    // bypassed unconditionally
+        [InlineData(false, Destination)]                 // plugin switched off
+        public async Task ItRefusesOnlyWhatWouldHaveUsedTheProxy(bool enabled, string url)
+        {
+            var inner = new StubHandler();
+            var logger = new RecordingLogger();
+
+            using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
+                       inner, StateWith(enabled), logger, null, proxyAttached: false)))
+            {
+                Assert.Null(await SendAsync(invoker, url));
+                Assert.Equal(1, inner.Calls);
+                Assert.Empty(logger.Errors);
             }
         }
 
@@ -137,7 +202,7 @@ namespace EmbyProxyRouter.Tests
             var logger = new RecordingLogger();
 
             using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
-                       new StubHandler(), StateWith(address: "nonsense"), logger, null)))
+                       new StubHandler(), StateWith(address: "nonsense"), logger, null, true)))
             {
                 var error = await SendAsync(invoker, Destination);
 
@@ -161,7 +226,7 @@ namespace EmbyProxyRouter.Tests
             var throttle = new LogThrottle(TimeSpan.FromMinutes(1));
 
             using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
-                       new StubHandler(), StateWith(address: "nonsense"), logger, throttle)))
+                       new StubHandler(), StateWith(address: "nonsense"), logger, throttle, true)))
             {
                 for (var i = 0; i < 20; i++)
                 {
@@ -183,7 +248,7 @@ namespace EmbyProxyRouter.Tests
             var throttle = new LogThrottle(TimeSpan.FromMinutes(1));
 
             using (var invoker = new HttpMessageInvoker(new ProxyGateHandler(
-                       new StubHandler(), StateWith(address: "nonsense"), logger, throttle)))
+                       new StubHandler(), StateWith(address: "nonsense"), logger, throttle, true)))
             {
                 await SendAsync(invoker, Destination);
                 await SendAsync(invoker, "https://image.tmdb.org/t/p/w500/x.jpg");

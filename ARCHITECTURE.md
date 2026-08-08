@@ -73,11 +73,25 @@ check URL, no interval and no health field, and its `ProxyCheck` only paints a b
 
 ## Why a `DelegatingHandler` is still needed
 
-For exactly one case. An `IWebProxy` can only *choose a proxy* or return `null`, and `null` means
-"connect directly" — so when the proxy is switched on with an address that does not parse, there is
-no URI to name and the resolver cannot refuse. The plugin therefore wraps the handler in a
-`DelegatingHandler` that can. This is safe because `CoreHttpClientManager` only ever passes the
-result to `new HttpClient(handler)` and never casts it.
+An `IWebProxy` can only *choose a proxy* or return `null`, and `null` means "connect directly" — so
+it cannot refuse. The plugin therefore wraps the handler in a `DelegatingHandler` that can. This is
+safe because `CoreHttpClientManager` only ever passes the result to `new HttpClient(handler)` and
+never casts it.
+
+Two cases need it, and both are the same leak reached from opposite ends: the routing verdict cannot
+be carried out, and handing the request on would send it in the clear.
+
+* **The proxy is switched on and its address does not parse.** There is no URI to name, so the
+  resolver has nothing to return but `null`. This is the case the gate was built for.
+* **The inner handler never received the proxy.** Configuring it threw, or Emby returned a handler
+  type nothing here can attach a proxy to. The verdict is `ViaProxy` and the address is perfectly
+  good — but this particular handler would send the request straight out.
+
+Neither is a judgement and neither is a mode. Both are facts settled before the request arrives: the
+first when the configuration was parsed, the second when the handler was built. `ProxyState.Decide`
+remains the only thing that decides *where* a request goes; the gate asks the narrower question of
+whether the handler it wraps can carry that out, and `ProxyGateHandler.Refusal` is where the two
+answers meet.
 
 The handler also bounds `ConnectTimeout`, which .NET leaves infinite: once every request goes to a
 single proxy, one that drops packets rather than refusing them hangs each of them for the full
@@ -116,6 +130,12 @@ skip the wrap would hand Emby a bare handler with neither a proxy nor a gate, ev
 going out in the clear — the one outcome the plugin exists to prevent. So the gate goes on either way and
 the failure is surfaced as a third patch state on the settings page, between "Active" and "NOT
 active".
+
+`Decorate` also tells the gate *which* handler it wrapped, via the `proxyAttached` constructor
+argument. Wrapping alone is not enough: a gate that only knew about the unparseable-address verdict
+would pass these requests through to a handler with no proxy on it, and the degraded status on the
+settings page would be claiming a protection that was not there. The flag has no default, because
+getting it wrong is silent.
 
 ## Certificate validation
 
@@ -335,8 +355,9 @@ pull request would have rejected.
 `tests/EmbyProxyRouter.Tests` (xUnit, `net8.0`) covers what is decidable without a server, which is
 most of the logic that has actually been wrong: `ProxyEndpoint.TryParse`, `BypassRules`,
 `ProxyState.Decide` and `Explain`, `DynamicWebProxy`, `ProxyGateHandler` against a stub inner
-handler and a recording logger, `LogThrottle`, and the `ProxySettings` clamps. All of it is pure
-functions over their inputs — no network, no Emby host, no Harmony.
+handler and a recording logger, `HttpHandlerPatch.Decorate` reached by reflection, `LogThrottle`,
+`ProxyProbe` against an in-process SOCKS5 server, and `ProxySettings`. Apart from that server on a
+loopback port, all of it is pure functions over their inputs — no Emby host, no Harmony.
 
 It references the plugin project and, unlike the plugin, copies the Emby assemblies into its own
 output with `Private=true`: a test host has no server to supply them. `lib/` still has to be
@@ -525,11 +546,12 @@ tests/EmbyProxyRouter.Tests/
   Fakes.cs                    Recording logger and stub inner handler
   ProxyEndpointTests.cs       Address parsing, ports, credentials
   BypassRulesTests.cs         Compiled-in entries, wildcards, CIDR, IPv4-mapped IPv6
-  ProxyStateTests.cs          The routing matrix and snapshot handling
   DynamicWebProxyTests.cs     What the resolver answers for each verdict
-  ProxyGateHandlerTests.cs    Blocking, redaction, throttling
+  ProxyGateHandlerTests.cs    Both refusals, redaction, throttling
+  HandlerDecorationTests.cs   What Decorate hands back when the proxy will not attach
   LogThrottleTests.cs         Windowing, suppressed counts, capacity behaviour
-  ProxySettingsTests.cs       Interval clamps, check-URL assembly
+  ProxySettingsTests.cs       Snapshot construction from the options
+  ProxyProbeTests.cs          The settings-page check against an in-process SOCKS5 server
   CertificatePolicyTests.cs   Scope of "ignore certificate validation"
   LogLanguageTests.cs         Enforces that the log is English and the page is not
 ```

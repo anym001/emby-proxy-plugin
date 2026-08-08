@@ -9,7 +9,7 @@
   "LabelPatchStatus": "Patch-Status",
 
   "LabelEnableProxy": "Proxy aktivieren",
-  "DescEnableProxy": "Wenn deaktiviert, verhält sich Emby exakt wie ohne dieses Plugin.",
+  "DescEnableProxy": "Wenn deaktiviert, verbindet sich der Emby-Kern direkt – auch dann, wenn HTTP_PROXY oder HTTPS_PROXY in der Umgebung gesetzt ist. Solange dieses Plugin installiert ist, bestimmt es diesen Traffic, ob es eingeschaltet ist oder nicht.",
 
   "LabelScheme": "Proxy-Schema",
   "DescScheme": "Wird nur verwendet, wenn die Proxy-Adresse kein eigenes Schema enthält.",
@@ -33,7 +33,7 @@
 
   "PatchCaption": "Patch",
   "PatchActive": "Aktiv – Traffic des Emby-Kerns läuft über dieses Plugin.",
-  "PatchDegraded": "Aktiv, aber der Proxy konnte mindestens einem HTTP-Handler nicht zugewiesen werden: {0} Diese Anfragen werden blockiert statt ungeschützt gesendet, laufen aber nicht über den Proxy. Ein Neustart des Servers behebt das in der Regel.",
+  "PatchDegraded": "Aktiv, aber der Proxy konnte mindestens einem HTTP-Handler nicht zugewiesen werden: {0} Anfragen über diesen Handler werden abgewiesen statt ungeschützt gesendet – es geht also nichts nach draußen, sie erreichen aber auch den Proxy nicht und werden weiter fehlschlagen. Ein Neustart des Servers behebt das in der Regel.",
   "PatchInactive": "NICHT aktiv – {0} Es wird kein Traffic umgeleitet.",
   "UnknownError": "unbekannter Fehler",
 
@@ -70,7 +70,7 @@
   "ErrInvalidUrl": "Proxy-Adresse ist keine gültige URL: {0}",
   "ErrUnsupportedScheme": "Nicht unterstütztes Proxy-Schema „{0}“. Unterstützt werden http, https und socks5.",
   "ErrNeedPort": "Proxy-Adresse braucht einen Port, z. B. 192.168.1.10:8080 oder socks5://192.168.1.10:1080",
-  "ErrPortNotNumber": "Proxy-Port ist keine Zahl: {0}",
+  "ErrPortNotNumber": "Der Text nach dem letzten Doppelpunkt in der Proxy-Adresse ist keine Portnummer. Schreibe sie als Host:Port, z. B. 192.168.1.10:8080",
   "ErrNoHost": "Proxy-Adresse enthält keinen Host.",
   "ErrUserInfoNeedsScheme": "Die Proxy-Adresse enthält Zugangsdaten, aber kein Schema. Schreibe sie als http://benutzer:passwort@192.168.1.10:8080 – oder lass die Zugangsdaten aus der Adresse weg und nutze die Felder für Benutzername und Passwort.",
   "ErrInvalidHost": "Proxy-Adresse enthält einen ungültigen Host: {0}",
