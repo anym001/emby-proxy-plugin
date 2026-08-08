@@ -68,8 +68,9 @@ That is worth stating because the alternative is seductive and expensive. Knowin
 the proxy is down is only useful in order to *stop* using it, which this plugin never does. Wanting
 that answer is what forces a poller, a check URL, a reachability state feeding routing, and a startup
 window in which the verdict is not yet in — and it makes routing depend on whatever host the check
-URL points at. Radarr, curl and every browser take the same view: `HttpProxySettings` there has no
-check URL, no interval and no health field, and its `ProxyCheck` only paints a banner.
+URL points at. Handing a proxy address to `curl` or to a browser behaves the same way: the proxy is
+used because it was configured, and a request through one that is down fails rather than quietly
+going out directly.
 
 ## Why a `DelegatingHandler` is still needed
 
@@ -230,18 +231,19 @@ matching is literal and does no DNS: a LAN device addressed by a dotted name (`e
 `nas.home.arpa`, an own domain pointing at a 192.168 address) is a name, not an IP, so the CIDR
 rules never see it either.
 
-### This switch is not Radarr's "Bypass Proxy for Local Addresses"
+### This switch is not .NET's `bypassOnLocal`
 
-The names are similar and the coverage is almost disjoint, which is worth stating because the
-comparison comes up. Measured against .NET 8, `WebProxy(bypassOnLocal: true)` bypasses loopback,
+The two are easy to conflate — a "bypass local addresses" option is a familiar thing to find in a
+proxy configuration — and their coverage is almost disjoint, which is worth stating. Measured
+against .NET 8, `WebProxy(bypassOnLocal: true)` bypasses loopback,
 dotless hostnames, **the machine's own interface addresses** (whatever range they are in — a public
 address on the host's own NIC is bypassed) and hosts in the machine's own DNS suffix. It does *not*
 bypass `192.168.1.50`, `10.11.12.13`, `169.254.0.0/16`, `fc00::/7` or `*.local`.
 
 This plugin's switch governs exactly the set that one does not: RFC1918, link-local, ULA and mDNS.
 Loopback is unconditional here rather than part of the switch, and dotless names are not covered at
-all. Radarr passes `BypassLocalAddress` and `BypassListAsArray` to `WebProxy` together for the same
-reason both exist here: neither mechanism subsumes the other.
+all. That is why the switch and the user's bypass list both exist and neither is redundant: they
+cover different things, and neither mechanism subsumes the other.
 
 **Emby's own endpoints are deliberately not bypassed.** `mb3admin.com` (`PluginSecurityManager`:
 `/admin/service/registration/validate`, `/admin/service/appstore/register`, and the plugin catalogue
@@ -468,9 +470,9 @@ but only through one channel, and it is worth knowing exactly how narrow that ch
 relying on it.
 
 `InstallationManager` reads the catalog from `https://www.mb3admin.com/admin/service/EmbyPackages.json`
-— a **compiled-in constant**. Emby has no equivalent of Jellyfin's custom repository URLs: there is no
-setting, no config file and no API for a second source. Appearing in the dashboard therefore means
-being accepted into Emby's own catalog; there is no self-hosted alternative.
+— a **compiled-in constant**. There is no setting, no config file and no API for pointing the server
+at a second source. Appearing in the dashboard therefore means being accepted into Emby's own
+catalog; there is no self-hosted alternative.
 
 `PluginUpdateTask` (`Key = "PluginUpdates"`, hidden) runs on startup and every 24 h — every 3 h when
 the server's update level is Beta. For each loaded plugin it looks the catalog up by **name and
