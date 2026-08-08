@@ -93,9 +93,13 @@ namespace EmbyProxyRouter.Proxy
         /// </remarks>
         public RouteDecision Decide(ProxySettings settings, Uri destination, out RouteReason reason)
         {
+            // Deliberately not defaulted to Settings when null. Substituting a fresh read here would
+            // silently undo the invariant this overload exists to enforce — that the verdict and
+            // whatever the caller does with it come from one snapshot — and turn a caller's mistake
+            // into the half-applied state it is meant to prevent.
             if (settings == null)
             {
-                settings = Settings;
+                throw new ArgumentNullException(nameof(settings));
             }
 
             if (!settings.Enabled)

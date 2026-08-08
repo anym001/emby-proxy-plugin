@@ -63,16 +63,12 @@ namespace EmbyProxyRouter.Proxy
                     // Decide only returns ViaProxy after establishing the endpoint is non-null.
                     return settings.Endpoint.Uri;
 
-                case RouteDecision.Blocked:
-                    // An IWebProxy cannot block — that is what ProxyGateHandler exists for, and it
-                    // rejects these before they ever reach the proxy resolver. Naming the proxy here
-                    // anyway means a hypothetical caller that skipped the gate still fails against an
-                    // unreachable proxy instead of going out in the clear. Note the honest limit of
-                    // that: when the proxy is enabled but misconfigured there is no endpoint to name,
-                    // and null means "connect directly". Enforcement lives in the gate, not here.
-                    return settings.Endpoint != null ? settings.Endpoint.Uri : null;
-
                 default:
+                    // Direct, and Blocked with it. An IWebProxy cannot express a block: null is the
+                    // only other thing it can say and null means "connect directly". Blocked is also
+                    // the one verdict that has no proxy URI to name even if it could — Decide reaches
+                    // it precisely because the endpoint is null. So enforcement lives in
+                    // ProxyGateHandler, which rejects these before the resolver is ever consulted.
                     return null;
             }
         }

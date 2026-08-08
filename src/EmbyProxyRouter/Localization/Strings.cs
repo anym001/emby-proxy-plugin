@@ -40,7 +40,5 @@ namespace EmbyProxyRouter.Localization
 
         public static string LabelBypassList => Localizer.Get(nameof(LabelBypassList));
         public static string DescBypassList => Localizer.Get(nameof(DescBypassList));
-
-
     }
 }

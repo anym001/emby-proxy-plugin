@@ -13,12 +13,11 @@ namespace EmbyProxyRouter.Proxy
     public static class ProxyRuntime
     {
         private static int _initialized;
+        private static ILogger _logger;
 
         public static ProxyState State { get; private set; }
 
         public static DynamicWebProxy Proxy { get; private set; }
-
-        public static ILogger Logger { get; private set; }
 
         public static void Initialize(ILogger logger)
         {
@@ -27,7 +26,7 @@ namespace EmbyProxyRouter.Proxy
                 return;
             }
 
-            Logger = logger;
+            _logger = logger;
             State = new ProxyState();
             Proxy = new DynamicWebProxy(State);
         }
@@ -45,24 +44,24 @@ namespace EmbyProxyRouter.Proxy
             var settings = ProxySettings.FromOptions(options);
             State.Apply(settings);
 
-            if (Logger == null)
+            if (_logger == null)
             {
                 return;
             }
 
             if (!settings.Enabled)
             {
-                Logger.Info("Proxy Router: disabled - Emby connects directly.");
+                _logger.Info("Proxy Router: disabled - Emby connects directly.");
             }
             else if (settings.Endpoint == null)
             {
-                Logger.Error("Proxy Router: enabled, but the configuration is invalid - " +
-                             (settings.ConfigError != null ? settings.ConfigError.Invariant() : "unknown error") +
-                             " | affected requests will be blocked.");
+                _logger.Error("Proxy Router: enabled, but the configuration is invalid - " +
+                              (settings.ConfigError != null ? settings.ConfigError.Invariant() : "unknown error") +
+                              " | affected requests will be blocked.");
             }
             else
             {
-                Logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe().Invariant() +
+                _logger.Info("Proxy Router: enabled - " + settings.Endpoint.Describe().Invariant() +
                             // Stated on every apply because it is not visible from the routing
                             // decisions themselves, and it decides whether a dead proxy also costs
                             // the server its own LAN.
