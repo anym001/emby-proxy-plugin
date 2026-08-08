@@ -33,7 +33,7 @@
 
   "PatchCaption": "Patch",
   "PatchActive": "Aktiv – Traffic des Emby-Kerns läuft über dieses Plugin.",
-  "PatchDegraded": "Aktiv, aber der Proxy konnte mindestens einem HTTP-Handler nicht zugewiesen werden: {0} Diese Anfragen werden blockiert statt ungeschützt gesendet, laufen aber nicht über den Proxy. Ein Neustart des Servers behebt das in der Regel.",
+  "PatchDegraded": "Aktiv, aber der Proxy konnte mindestens einem HTTP-Handler nicht zugewiesen werden: {0} Anfragen über diesen Handler werden abgewiesen statt ungeschützt gesendet – es geht also nichts nach draußen, sie erreichen aber auch den Proxy nicht und werden weiter fehlschlagen. Ein Neustart des Servers behebt das in der Regel.",
   "PatchInactive": "NICHT aktiv – {0} Es wird kein Traffic umgeleitet.",
   "UnknownError": "unbekannter Fehler",
 

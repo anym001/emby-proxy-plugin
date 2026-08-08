@@ -84,9 +84,14 @@ plugin looks installed while routing nothing.
 
 `tests/EmbyProxyRouter.Tests` is an xUnit project covering the parts that are decidable without a
 server: `ProxyEndpoint.TryParse`, `BypassRules`, `ProxyState.Decide`, `DynamicWebProxy`,
-`ProxyGateHandler` against a stub inner handler, `LogThrottle`, and the `ProxySettings` clamps. It
-references the plugin project and copies the Emby assemblies into its own output, since a test host
-has no server to supply them. Add cases there when you touch any of those.
+`ProxyGateHandler` against a stub inner handler, `HttpHandlerPatch.Decorate` and `Configure` reached
+by reflection, `LogThrottle`, `ProxyProbe` against an in-process SOCKS5 server, and `ProxySettings`.
+It references the plugin project and copies the Emby assemblies into its own output, since a test
+host has no server to supply them. Add cases there when you touch any of those.
+
+The tests that write `HttpHandlerPatch`'s statics share the `PatchStatics` xUnit collection. xUnit
+runs different classes in parallel, so a new class touching those fields has to join it rather than
+race with the ones already there.
 
 **A green test run is not evidence that the plugin works.** It says nothing about whether the Harmony
 patch applies — that is `verify-patch-target.sh`'s job — and nothing about real proxy traffic. The
@@ -113,9 +118,13 @@ without re-verifying, because each one is load-bearing:
   is the whole enforcement. Knowing in advance that the proxy is down is only useful in order to stop
   using it, which this plugin never does — wanting that answer is what drags in a poller, a check URL
   and a routing input that depends on a stranger's uptime.
-* **`ProxyGateHandler` exists for one case `IWebProxy` cannot express.** The proxy is switched on and
-  its address does not parse, so there is no URI to name; `null` from `GetProxy` means "connect
-  directly" — a leak. That single case needs a `DelegatingHandler` that can refuse. Do not grow it.
+* **`ProxyGateHandler` exists for what `IWebProxy` cannot express.** `null` from `GetProxy` means
+  "connect directly", so a resolver can never refuse. Two cases need that and no others: the proxy
+  is switched on and its address does not parse (no URI to name), and the inner handler never
+  received the proxy (`Decorate` passes `proxyAttached: false`, so a `ViaProxy` verdict it cannot
+  carry out is refused instead of sent in the clear). The admissible shape is narrow — a fact
+  settled before the request arrives, never a judgement made during one. Anything that has to *find
+  out* something to answer, above all whether the proxy is reachable, does not belong here.
 * **`ProxyProbe` is a diagnostic, never a routing input.** It runs from the settings page only, talks
   to the proxy and to nobody else, and stops before the proxy would connect anywhere. Nothing in
   `ProxyState` may consult it.

@@ -33,7 +33,7 @@
 
   "PatchCaption": "Patch",
   "PatchActive": "Active - Emby core traffic passes through this plugin.",
-  "PatchDegraded": "Active, but the proxy could not be attached to at least one HTTP handler: {0} Those requests are blocked rather than sent unproxied, but they do not go through the proxy. Restarting the server usually clears this.",
+  "PatchDegraded": "Active, but the proxy could not be attached to at least one HTTP handler: {0} Requests on that handler are refused rather than sent unproxied, so nothing escapes - but they do not reach the proxy either, and they will keep failing. Restarting the server usually clears this.",
   "PatchInactive": "NOT active - {0} No traffic is being redirected.",
   "UnknownError": "unknown error",
 
@@ -67,6 +67,7 @@
   "LogReasonMisconfigured": "proxy is enabled but misconfigured",
   "LogReasonBypassed": "destination is on the bypass list",
   "LogReasonProxied": "destination goes through the proxy",
+  "LogReasonNotAttached": "the proxy could not be attached to this HTTP handler",
 
   "LogBlocked": "Request blocked, no usable proxy: {0} ({1})",
   "LogSuppressed": " [+{0} identical in the last {1} s]",
