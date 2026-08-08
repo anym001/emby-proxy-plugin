@@ -24,21 +24,24 @@ namespace EmbyProxyRouter.Proxy
 
         public int Port => Uri.Port;
 
+        /// <summary>Scheme, host and port, with no comment on credentials.</summary>
+        public string Authority => Uri.Scheme + "://" + Uri.Host + ":" + Uri.Port;
+
         /// <summary>
-        /// Scheme, host, port and whether credentials are configured — never the password.
+        /// <see cref="Authority"/> plus whether credentials are configured — never the password.
         /// </summary>
         /// <remarks>
-        /// Ends up embedded in a log line *and* in the reachability detail shown on the settings
-        /// page, so it is deferred like everything else with two audiences: the log renders it in
-        /// English, the page in the dashboard language.
+        /// Ends up embedded in a log line, so it is deferred like everything else with two
+        /// audiences: the log renders it in English, the page in the dashboard language. The probe
+        /// results use <see cref="Authority"/> directly instead — they already state the outcome of
+        /// authentication in the sentence itself, so repeating it here would say the same thing
+        /// twice.
         /// </remarks>
         public LocalizedText Describe()
         {
-            var authority = Uri.Scheme + "://" + Uri.Host + ":" + Uri.Port;
-
             return Credential == null
-                ? LocalizedText.Of("DescribeNoAuth", authority)
-                : LocalizedText.Of("DescribeAuthAs", authority, Credential.UserName);
+                ? LocalizedText.Of("DescribeNoAuth", Authority)
+                : LocalizedText.Of("DescribeAuthAs", Authority, Credential.UserName);
         }
 
         /// <summary>
@@ -247,7 +250,7 @@ namespace EmbyProxyRouter.Proxy
             }
 
             int start;
-            var authority = Authority(address, out start);
+            var authority = RawAuthority(address, out start);
 
             var at = authority.LastIndexOf('@');
             if (at < 0)
@@ -280,7 +283,7 @@ namespace EmbyProxyRouter.Proxy
         /// </remarks>
         private static bool AuthorityHasPort(string address)
         {
-            var authority = Authority(address, out _);
+            var authority = RawAuthority(address, out _);
 
             var at = authority.LastIndexOf('@');
             if (at >= 0)
@@ -315,7 +318,7 @@ namespace EmbyProxyRouter.Proxy
         /// nothing but a scheme yields the empty string, and both callers treat that as "nothing
         /// here", which is the same answer they gave before.
         /// </remarks>
-        private static string Authority(string address, out int start)
+        private static string RawAuthority(string address, out int start)
         {
             var schemeEnd = address.IndexOf("://", StringComparison.Ordinal);
             start = schemeEnd < 0 ? 0 : schemeEnd + 3;
