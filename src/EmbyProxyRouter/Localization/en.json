@@ -51,6 +51,7 @@
   "ProbeTcpFailed": "Cannot connect to {0}:{1}: {2}",
   "ProbeTcpOnlyOk": "{0} accepts connections. An HTTP proxy reveals nothing further until it is given a request to forward, so this confirms it is reachable, not that it forwards.",
   "ProbeNotSocks5": "{0}:{1} accepts connections but does not answer as a SOCKS5 proxy.",
+  "ProbeSocks5Silent": "{0}:{1} accepts connections but never answers the SOCKS5 greeting. Check that this port really speaks SOCKS5 - an HTTP proxy waits for a request instead of replying, and looks exactly like this.",
   "ProbeSocks5NoMethod": "The SOCKS5 proxy rejected every authentication method offered.",
   "ProbeSocks5Method": "The SOCKS5 proxy selected authentication method {0}, which this plugin cannot perform.",
   "ProbeSocks5Truncated": "The SOCKS5 proxy closed the connection during authentication.",

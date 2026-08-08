@@ -63,6 +63,24 @@ jobs:
           tag="${TAG}"
           commit="$(git rev-parse HEAD)"
 
+          # The plugin version is the csproj's, and the tag has to agree with it. Emby's BasePlugin
+          # takes its Version from the assembly, so that number is what the dashboard shows and what
+          # its update task compares - a tag that says one thing while the DLL says another produces
+          # a release nobody can identify once it is installed, and it fails silently because the
+          # build succeeds either way. Asserted rather than injected: the repository states what it
+          # is, the tag confirms it. See the comment on <Version> in the csproj.
+          plugin="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT" | tr -d '[:space:]')"
+          if [ -z "$plugin" ]; then
+            echo "::error::No <Version> found in $PROJECT."
+            exit 1
+          fi
+          if [ "$tag" != "v$plugin" ]; then
+            echo "::error::Tag '$tag' does not match the plugin version in $PROJECT (expected 'v$plugin')."
+            echo "         Bump <Version> and re-tag, or tag the commit that carries the intended version."
+            exit 1
+          fi
+          echo "Plugin version $plugin matches tag $tag"
+
           {
             echo "version=$version"
             echo "tag=$tag"
@@ -71,6 +89,7 @@ jobs:
           {
             echo "### Release $tag"
             echo
+            echo "- Plugin \`$plugin\`"
             echo "- Emby Server \`$version\`"
             echo "- Commit \`$commit\`"
           } >> "$GITHUB_STEP_SUMMARY"

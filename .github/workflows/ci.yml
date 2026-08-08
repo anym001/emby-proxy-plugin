@@ -73,6 +73,40 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # release.yml refuses a tag that disagrees with <Version> in the csproj,
+      # which catches the mistake but only once the tag has been pushed - by
+      # then the fix is deleting a tag and re-pushing it. This asks the same
+      # question early and from the other side: has the version this branch
+      # claims already been released?
+      #
+      # If it has, main is about to carry changes under a number that is
+      # already published, which is precisely how two different releases came
+      # to report 1.0.0.0. Failing here costs one line in the pull request that
+      # prepares the next release, and it is the only moment where that line is
+      # cheap to add.
+      #
+      # Asked of the API rather than of git: the default checkout fetches no
+      # tags, and pulling the whole history to answer one yes/no question is a
+      # poor trade. gh is preinstalled on GitHub-hosted runners.
+      - name: The version must not already be released
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          plugin="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT" | tr -d '[:space:]')"
+          if [ -z "$plugin" ]; then
+            echo "::error::No <Version> found in $PROJECT."
+            exit 1
+          fi
+
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${plugin}" >/dev/null 2>&1; then
+            echo "::error::Version $plugin is already released as tag v$plugin."
+            echo "         Bump <Version> in $PROJECT, or this change ships under a number that is taken."
+            exit 1
+          fi
+
+          echo "Version $plugin is not yet released."
+
       # build/emby-version.txt is the single source of truth for the pinned
       # version; inputs.* is empty on events that carry no inputs (pull_request).
       #

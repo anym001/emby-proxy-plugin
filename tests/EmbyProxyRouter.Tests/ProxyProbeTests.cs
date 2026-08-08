@@ -147,6 +147,41 @@ namespace EmbyProxyRouter.Tests
             }
         }
 
+        /// <summary>
+        /// A port that accepts and then says nothing — which is what an HTTP proxy does.
+        /// </summary>
+        /// <remarks>
+        /// Distinct from <see cref="SomethingThatIsNotSocks5Fails"/>, and the distinction is the
+        /// whole point: that stub answers with something the probe can look at and reject, while a
+        /// real HTTP proxy answers with nothing at all. It is waiting for a request line, the SOCKS5
+        /// greeting is not one, and neither side speaks next. Found against tinyproxy, addressed as
+        /// <c>socks5://</c> — which is precisely the confusion the probe exists to resolve, and
+        /// precisely where it used to say "the check could not be run".
+        ///
+        /// The wait is ended through the caller's token rather than by sitting out the probe's own
+        /// five-second timeout. Both arrive at the same catch — what is under test is the diagnosis
+        /// that catch produces, not the duration in front of it, and five seconds is a poor price
+        /// for a suite that otherwise finishes in a fraction of one.
+        /// </remarks>
+        [Fact]
+        public async Task APortThatAcceptsAndSaysNothingIsNamedAsSuch()
+        {
+            using (var stub = new Socks5Stub(requireAuth: false, acceptCredentials: true, silent: true))
+            using (var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(250)))
+            {
+                var result = await ProxyProbe.RunAsync(
+                    Settings("socks5://127.0.0.1:" + stub.Port), caller.Token);
+
+                Assert.Equal(ProbeVerdict.Failed, result.Verdict);
+
+                // The key, not the wording: the failure this replaces was a correct verdict
+                // carrying a message that named nothing, so the message is the fix.
+                Assert.Equal("ProbeSocks5Silent", result.Detail.Key);
+                Assert.Contains("SOCKS5", result.Detail.Invariant());
+                Assert.Equal(0, stub.ConnectRequests);
+            }
+        }
+
         // --- HTTP --------------------------------------------------------------------------------
 
         /// <summary>
@@ -173,13 +208,24 @@ namespace EmbyProxyRouter.Tests
             private readonly bool _requireAuth;
             private readonly bool _accept;
             private readonly bool _speakSocks;
+            private readonly bool _silent;
+            private readonly CancellationTokenSource _stop = new CancellationTokenSource();
             private int _connectRequests;
 
-            public Socks5Stub(bool requireAuth, bool acceptCredentials, bool speakSocks = true)
+            /// <param name="silent">
+            /// Accept the connection and then say nothing at all — which is not the same as
+            /// <paramref name="speakSocks"/> being false. That one answers with something that is
+            /// not SOCKS5, and the probe can name it. This one answers with nothing, which is what a
+            /// real HTTP proxy does when handed a greeting: it is waiting for a request line, and
+            /// neither side speaks next.
+            /// </param>
+            public Socks5Stub(
+                bool requireAuth, bool acceptCredentials, bool speakSocks = true, bool silent = false)
             {
                 _requireAuth = requireAuth;
                 _accept = acceptCredentials;
                 _speakSocks = speakSocks;
+                _silent = silent;
 
                 _listener = new TcpListener(IPAddress.Loopback, 0);
                 _listener.Start();
@@ -222,6 +268,15 @@ namespace EmbyProxyRouter.Tests
                     using (client)
                     {
                         var stream = client.GetStream();
+
+                        if (_silent)
+                        {
+                            // Hold the connection open and write nothing, so the probe waits on a
+                            // read that never completes. Disposing the stub closes it.
+                            await Task.Delay(System.Threading.Timeout.Infinite, _stop.Token)
+                                .ConfigureAwait(false);
+                            return;
+                        }
 
                         if (!_speakSocks)
                         {
@@ -314,7 +369,10 @@ namespace EmbyProxyRouter.Tests
 
             public void Dispose()
             {
+                // Releases the silent handler's endless wait as well as the accept loop.
+                _stop.Cancel();
                 _listener.Stop();
+                _stop.Dispose();
             }
         }
     }

@@ -145,6 +145,30 @@ namespace EmbyProxyRouter.Proxy
         private static async Task<ProbeResult> Socks5Async(
             TcpClient tcp, ProxyEndpoint endpoint, CancellationToken cancellationToken)
         {
+            try
+            {
+                return await Socks5CoreAsync(tcp, endpoint, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // A port that accepts the connection and then says nothing. The most likely reason
+                // by far is that it is an HTTP proxy: it waits for a request line, the greeting is
+                // not one, and neither side speaks first — so this is exactly what pointing the
+                // scheme at the wrong port looks like, which is the mistake the probe exists to
+                // catch. Without this the read simply times out into RunAsync's catch-all, which
+                // reports "the check could not be run", telling the one person who could fix it
+                // nothing about what to fix.
+                //
+                // TlsAsync has had the same handler for the same reason. The message deliberately
+                // quotes no duration: the wait also ends if the caller cancels, and a message
+                // naming five seconds after two would be its own small lie.
+                return Failed(LocalizedText.Of("ProbeSocks5Silent", endpoint.Host, endpoint.Port));
+            }
+        }
+
+        private static async Task<ProbeResult> Socks5CoreAsync(
+            TcpClient tcp, ProxyEndpoint endpoint, CancellationToken cancellationToken)
+        {
             var stream = tcp.GetStream();
             var credential = endpoint.Credential;
             var wantAuth = credential != null && !string.IsNullOrEmpty(credential.UserName);

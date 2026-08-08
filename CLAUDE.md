@@ -51,12 +51,17 @@ deliverable are separate events.** Do not merge them back together.
   Lints, compiles, runs both verify scripts, and runs the tests. `inputs.*` is empty on `pull_request`, which is why
   the version is resolved in a step rather than in `env:`. It uploads a DLL **only on
   `workflow_dispatch`** — a candidate against a new Emby version is worth having; a pull-request
-  artifact is not. Do not add the upload back to pull requests.
+  artifact is not. Do not add the upload back to pull requests. It also fails a branch whose
+  `<Version>` is already a published tag: that and `release.yml`'s tag assertion are the same
+  invariant approached from the two ends, one before the merge and one before the publish.
 * `release.yml` — tags matching `v*`, and nothing else. The only workflow that publishes. It repeats
   CI's verification rather than trusting a pull request ran it, because a tag can sit on any commit.
   It has **no version input on purpose**: a released DLL must be built against the version the
-  repository claims to support. Needs `contents: write`; publishes with the preinstalled `gh` CLI so
-  it pulls in no third-party action.
+  repository claims to support. It asserts that the tag equals `v` + `<Version>` from the csproj and
+  refuses the release otherwise — for the same reason turned on the plugin's own version, since Emby
+  reads that number out of the assembly and a tag disagreeing with it ships a release nobody can
+  identify once installed. Needs `contents: write`; publishes with the preinstalled `gh` CLI so it
+  pulls in no third-party action.
 * `release-check.yml` — finds Emby releases newer than the pinned version and dispatches `ci.yml`
   against them. Emby publishes stable (`4.9.x`) and beta (`4.10.0.x`) in parallel, so selection is by
   the `prerelease` flag, never by version order.
@@ -83,9 +88,12 @@ has changed before. A non-matching Harmony postfix fails **silently** — it nev
 plugin looks installed while routing nothing.
 
 `tests/EmbyProxyRouter.Tests` is an xUnit project covering the parts that are decidable without a
-server: `ProxyEndpoint.TryParse`, `BypassRules`, `ProxyState.Decide`, `DynamicWebProxy`,
-`ProxyGateHandler` against a stub inner handler, `HttpHandlerPatch.Decorate` and `Configure` reached
-by reflection, `LogThrottle`, `ProxyProbe` against an in-process SOCKS5 server, and `ProxySettings`.
+server: `ProxyEndpoint.TryParse`, `BypassRules`, `DynamicWebProxy`, `ProxyGateHandler` against a
+stub inner handler, `HttpHandlerPatch.Decorate` and `Configure` reached by reflection (the latter
+for the certificate-validation option), `LogThrottle`, `ProxyProbe` against an in-process SOCKS5
+server, `ProxySettings`, and the log-language rule below. `ProxyState.Decide` has no test class of
+its own — it is exercised through `DynamicWebProxy` and the gate, which are the two callers that
+have to agree with it.
 It references the plugin project and copies the Emby assemblies into its own output, since a test
 host has no server to supply them. Add cases there when you touch any of those.
 
