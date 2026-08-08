@@ -135,10 +135,17 @@ namespace EmbyProxyRouter.Proxy
                 // Invariant and digits-only: the current culture must not decide what a port looks
                 // like, and the default NumberStyles.Integer would accept " -1" as a port and let it
                 // fall through to the "no explicit port" branch below with the wrong message.
+                //
+                // The offending text is described rather than quoted — the one rejection in this
+                // method that does not echo its input. Redact cannot help here: it works on an
+                // address, and this is the tail of one, so a value it would have masked inside a
+                // full address arrives here already stripped of the context that identifies it.
+                // The address is in the field in front of whoever reads this; the log does not need
+                // a copy of whatever they typed after the last colon.
                 var portText = address.Substring(colon + 1);
                 if (!int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture, out port))
                 {
-                    error = LocalizedText.Of("ErrPortNotNumber", portText);
+                    error = LocalizedText.Of("ErrPortNotNumber");
                     return false;
                 }
             }

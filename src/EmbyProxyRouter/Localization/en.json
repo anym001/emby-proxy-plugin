@@ -79,7 +79,7 @@
   "ErrInvalidUrl": "Proxy address is not a valid URL: {0}",
   "ErrUnsupportedScheme": "Unsupported proxy scheme '{0}'. Supported schemes are http, https and socks5.",
   "ErrNeedPort": "Proxy address needs a port, for example 192.168.1.10:8080 or socks5://192.168.1.10:1080",
-  "ErrPortNotNumber": "Proxy port is not a number: {0}",
+  "ErrPortNotNumber": "The text after the last colon in the proxy address is not a port number. Write it as host:port, for example 192.168.1.10:8080",
   "ErrNoHost": "Proxy address contains no host.",
   "ErrUserInfoNeedsScheme": "The proxy address carries credentials but no scheme. Write it as http://user:password@192.168.1.10:8080, or leave the credentials out of the address and use the username and password fields.",
   "ErrInvalidHost": "Proxy address contains an invalid host: {0}",
