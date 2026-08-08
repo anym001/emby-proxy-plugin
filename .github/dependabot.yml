@@ -6,7 +6,7 @@ version: 2
 # is, which is the only reason automating it is safe here.
 
 updates:
-  # The actions used by the three workflows. GitHub already reports
+  # The actions used by the four workflows. GitHub already reports
   # that checkout, setup-dotnet, cache and upload-artifact v4 target the
   # deprecated Node 20 runtime and are being forced onto Node 24; this is what
   # keeps the eventual v5 bump from having to be noticed by hand.

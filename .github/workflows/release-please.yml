@@ -1,0 +1,36 @@
+name: Release Please
+
+# Keeps <Version> in the csproj and CHANGELOG.md in sync with the Conventional Commits landing on
+# main, and turns that into a tag + GitHub Release when the release PR it maintains gets merged.
+#
+# It does not publish anything itself and does not replace release.yml. release.yml already listens
+# for both `push: tags: v*` and `release: published` - the latter specifically for a release created
+# through the UI or the API rather than a tag push, which is exactly what this workflow does - and it
+# already uploads to an existing release instead of creating a duplicate when one is there
+# (`gh release view` before `gh release create`). So the release this workflow publishes is picked up
+# by release.yml unchanged, which re-verifies the patch target and attaches the DLL to it. Deciding
+# what ships is still release.yml's job, on a tag; this workflow only decides when a version bump is
+# due and what number it gets.
+#
+# Requires "Allow GitHub Actions to create and approve pull requests" under Settings > Actions >
+# General - ci.yml's Emby-version bump PR already relies on the same permission, so it should already
+# be on.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run release-please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
