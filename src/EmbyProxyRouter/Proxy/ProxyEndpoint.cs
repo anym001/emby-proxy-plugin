@@ -250,7 +250,7 @@ namespace EmbyProxyRouter.Proxy
             }
 
             int start;
-            var authority = Authority(address, out start);
+            var authority = RawAuthority(address, out start);
 
             var at = authority.LastIndexOf('@');
             if (at < 0)
@@ -283,7 +283,7 @@ namespace EmbyProxyRouter.Proxy
         /// </remarks>
         private static bool AuthorityHasPort(string address)
         {
-            var authority = Authority(address, out _);
+            var authority = RawAuthority(address, out _);
 
             var at = authority.LastIndexOf('@');
             if (at >= 0)
@@ -318,7 +318,7 @@ namespace EmbyProxyRouter.Proxy
         /// nothing but a scheme yields the empty string, and both callers treat that as "nothing
         /// here", which is the same answer they gave before.
         /// </remarks>
-        private static string Authority(string address, out int start)
+        private static string RawAuthority(string address, out int start)
         {
             var schemeEnd = address.IndexOf("://", StringComparison.Ordinal);
             start = schemeEnd < 0 ? 0 : schemeEnd + 3;
