@@ -26,7 +26,7 @@
       value here would have to be matched against a three-component tag, and the only way to do that
       is a transformation that can disagree with itself.
     -->
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
