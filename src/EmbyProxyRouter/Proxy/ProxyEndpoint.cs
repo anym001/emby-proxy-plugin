@@ -24,24 +24,21 @@ namespace EmbyProxyRouter.Proxy
 
         public int Port => Uri.Port;
 
-        /// <summary>Scheme, host and port, with no comment on credentials.</summary>
-        public string Authority => Uri.Scheme + "://" + Uri.Host + ":" + Uri.Port;
-
         /// <summary>
-        /// <see cref="Authority"/> plus whether credentials are configured — never the password.
+        /// Scheme, host, port and whether credentials are configured — never the password.
         /// </summary>
         /// <remarks>
-        /// Ends up embedded in a log line, so it is deferred like everything else with two
-        /// audiences: the log renders it in English, the page in the dashboard language. The probe
-        /// results use <see cref="Authority"/> directly instead — they already state the outcome of
-        /// authentication in the sentence itself, so repeating it here would say the same thing
-        /// twice.
+        /// Ends up embedded in a log line *and* in the reachability detail shown on the settings
+        /// page, so it is deferred like everything else with two audiences: the log renders it in
+        /// English, the page in the dashboard language.
         /// </remarks>
         public LocalizedText Describe()
         {
+            var authority = Uri.Scheme + "://" + Uri.Host + ":" + Uri.Port;
+
             return Credential == null
-                ? LocalizedText.Of("DescribeNoAuth", Authority)
-                : LocalizedText.Of("DescribeAuthAs", Authority, Credential.UserName);
+                ? LocalizedText.Of("DescribeNoAuth", authority)
+                : LocalizedText.Of("DescribeAuthAs", authority, Credential.UserName);
         }
 
         /// <summary>

@@ -119,7 +119,7 @@ namespace EmbyProxyRouter.Proxy
                             // more than was established.
                             return new ProbeResult(
                                 ProbeVerdict.Ok,
-                                LocalizedText.Of("ProbeTcpOnlyOk", endpoint.Authority));
+                                LocalizedText.Of("ProbeTcpOnlyOk", endpoint.Describe()));
                     }
                 }
             }
@@ -194,7 +194,7 @@ namespace EmbyProxyRouter.Proxy
             {
                 return wantAuth
                     ? new ProbeResult(ProbeVerdict.Warning, LocalizedText.Of("ProbeSocks5AuthIgnored"))
-                    : new ProbeResult(ProbeVerdict.Ok, LocalizedText.Of("ProbeSocks5Ok", endpoint.Authority));
+                    : new ProbeResult(ProbeVerdict.Ok, LocalizedText.Of("ProbeSocks5Ok", endpoint.Describe()));
             }
 
             if (reply[1] != 0x02 || !wantAuth)
@@ -224,9 +224,7 @@ namespace EmbyProxyRouter.Proxy
             }
 
             return authReply[1] == 0x00
-                ? new ProbeResult(
-                    ProbeVerdict.Ok,
-                    LocalizedText.Of("ProbeSocks5AuthOk", endpoint.Authority, credential.UserName))
+                ? new ProbeResult(ProbeVerdict.Ok, LocalizedText.Of("ProbeSocks5AuthOk", endpoint.Describe()))
                 : Failed(LocalizedText.Of("ProbeSocks5AuthRejected", credential.UserName));
         }
 
@@ -253,7 +251,7 @@ namespace EmbyProxyRouter.Proxy
                         cancellationToken).ConfigureAwait(false);
 
                     return new ProbeResult(
-                        ProbeVerdict.Ok, LocalizedText.Of("ProbeTlsOk", endpoint.Authority));
+                        ProbeVerdict.Ok, LocalizedText.Of("ProbeTlsOk", endpoint.Describe()));
                 }
             }
             catch (OperationCanceledException)
