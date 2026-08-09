@@ -1,8 +1,9 @@
 # Emby Proxy Router
 
 A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) traffic that the
-**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5**.
-Everything goes through it; what does not is something you configure.
+**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5**. All
+of that traffic goes through it; opting part of it out is something you configure. Media streaming
+and playback are a different kind of traffic entirely and are not covered — see below.
 
 ## What this plugin does
 
@@ -14,8 +15,6 @@ Everything goes through it; what does not is something you configure.
   talks to the proxy and to nothing else.
 * **No fallback to a direct connection.** A configured proxy is used; if it cannot be reached, the
   request fails.
-* Routes everything through the proxy by default, with a switch to keep RFC1918 and link-local
-  traffic off it. Loopback is never proxied.
 
 ## What this plugin explicitly does NOT do
 
