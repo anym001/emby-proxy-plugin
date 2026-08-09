@@ -256,6 +256,45 @@ The accepted cost is that a dead proxy also stops Premiere from validating, and
 that Emby's licensing servers see the proxy's egress address. A user who wants the old behaviour can
 put the hosts in the bypass list; the plugin no longer decides it for them.
 
+## Localization
+
+Strings live in `src/EmbyProxyRouter/Localization/*.json` and are embedded at build time, so there
+are no loose files to deploy. `en.json` is the reference: every key must exist there, and other
+languages fall back to it key by key rather than rendering blank.
+
+**The plugin has no language setting and must not grow one.** The language follows Emby's own
+display language, which the server applies process-wide in `ApplicationHost.SetDefaultThreadCulture`
+— called from the host constructor *and* from `OnConfigurationUpdated`, with no per-request
+localization middleware anywhere in the server. `Localizer` therefore reads
+`CultureInfo.CurrentUICulture` on each lookup, which is what makes the page track the dashboard
+without a restart. A switch of its own would only let the plugin page disagree with the rest of the
+dashboard.
+
+Settings-page labels and descriptions go through `[DisplayNameL(nameof(Strings.X), typeof(Strings))]`,
+which resolves through Emby's `LocalizableString`. That requires `Strings` to expose a **public
+static string property with a getter**: it caches the reflected `PropertyInfo` but re-invokes the
+getter on every read, which is the other half of what makes a live language change work. Runtime
+strings — status text, validation errors — call `Localizer.Get` / `Localizer.Format` directly.
+
+Adding a language is one file: `<code>.json` using the culture code Emby uses (`fr`, `zh-CN`,
+`pt-BR`, …). No csproj entry, no C# change.
+
+### The log is English; only the dashboard is translated
+
+A log line is read by whoever is debugging the server — often not the person whose display language
+is set, and usually after the fact, pasted into an issue or grepped for a phrase out of this
+documentation. Translating it would make that worse for everyone involved. The rule is mechanical so
+it can be checked rather than remembered:
+
+* Keys written to the log are prefixed `Log` and live in **`en.json` alone**, resolved with
+  `Localizer.GetInvariant` / `FormatInvariant` — never `Get` / `Format`. `LogLanguageTests` fails the
+  build if a `Log*` key appears in any other language file.
+* A value reaching **both** audiences — a proxy-address parse error, the endpoint description — is
+  carried as a `LocalizedText` rather than a rendered string, and each sink asks for what it needs:
+  `.Invariant()` for the log, `.Localized()` for the page. Nested `LocalizedText` arguments follow
+  their parent, so a rendered message is in one language throughout.
+* Everything else is a UI string and belongs in every language file.
+
 ## Building
 
 Requirements: **.NET SDK 8.0** plus `curl`, `ar` and `tar`.
@@ -372,6 +411,10 @@ It references the plugin project and, unlike the plugin, copies the Emby assembl
 output with `Private=true`: a test host has no server to supply them. `lib/` still has to be
 populated by `build/fetch-emby-refs.sh` first.
 
+The classes that write `HttpHandlerPatch`'s statics share the `PatchStatics` xUnit collection.
+xUnit runs separate classes in parallel, so a new class touching those fields has to join the
+collection rather than race with the ones already in it.
+
 Two things it deliberately does not cover. The **Harmony patch**, because whether
 `CreateHttpClientHandler` still has the expected shape is a fact about a shipped Emby build rather
 than about this code — `build/verify-patch-target.sh` answers that by decompiling the real assembly.
@@ -384,6 +427,12 @@ on purpose and confirm it goes red before committing it.
 It also runs on manual dispatch with an Emby version as input; given none, it uses the pinned
 `build/emby-version.txt`. The version is the cache key for the fetched assemblies, so only the first
 run per version pays for the ~180 MB download.
+
+That resolution happens in a **step**, not in `env:`, and it has to. `inputs.*` is empty on any event
+that carries no inputs — `pull_request` above all — so an `env:` block reading it would resolve to
+the empty string on every pull request rather than falling back to the pinned file. The step reads
+the input, falls back to `build/emby-version.txt` when it is blank, and everything downstream uses
+what it resolved.
 
 **Only a manual run uploads a DLL**, named `EmbyProxyRouter-emby<version>-<commit>`. That is the
 `release-check.yml` case: a candidate against a *new* Emby version, worth having in hand to try
@@ -426,8 +475,14 @@ verified against has to be the one the repository claims to support — and atta
 
 It repeats CI's verification instead of trusting that a pull request ran it. A tag can be placed on
 any commit, including one that never went through a pull request, and shipping a plugin whose Harmony
-patch no longer matches is the one failure this project cannot afford: it is silent. Publishing uses
-the preinstalled `gh` CLI rather than a third-party action, so it adds no supply chain of its own.
+patch no longer matches is the one failure this project cannot afford: it is silent. Publishing needs
+`contents: write` and uses the preinstalled `gh` CLI rather than a third-party action, so it adds no
+supply chain of its own.
+
+It also asserts that the tag equals `v` + `<Version>` from the csproj and refuses to publish when the
+two disagree. Emby reads the plugin version out of the assembly, so a tag claiming one number while
+the DLL says another produces a release nobody can identify once it is installed. This is the only
+place that assertion is made — see `ci.yml` above for why it is not repeated per pull request.
 
 Cutting a release is one command:
 
@@ -485,12 +540,20 @@ Every action is pinned to a **commit SHA** with the version in a trailing commen
 tag: a tag can be moved to point at different code, a SHA cannot. That is also what makes the grouped
 Dependabot pull request worth having — it is the mechanism that keeps the pins current.
 
-`.github/dependabot.yml` covers the two dependency surfaces this repository actually has. The
-workflow actions are grouped into a single monthly pull request — they move together, and separate
-pull requests would conflict on the same pinned-SHA lines. `Lib.Harmony`, the only NuGet dependency,
-gets its own. Both go through `ci.yml` like any other change, which matters most for Harmony: it is
-embedded into the plugin DLL and patches the CLR at runtime, so a bump is verified by the
-patch-target check before it is taken rather than after.
+`.github/dependabot.yml` covers the three dependency surfaces this repository has, split by what a
+bump can break rather than by ecosystem:
+
+* **The workflow actions**, grouped into a single monthly pull request — they move together, and
+  separate pull requests would conflict on the same pinned-SHA lines.
+* **`Lib.Harmony`**, the plugin's only shipped NuGet dependency, ungrouped and on its own. It is
+  embedded *into* the plugin DLL rather than shipped beside it, so a bump changes the artifact
+  itself, and it patches the CLR at runtime — the part of this plugin with the least margin for a
+  silent regression. The patch-target check is what has to pass before such a bump is taken.
+* **The test project's xunit and VSTest packages**, grouped separately. They ship in nothing and
+  cannot affect the artifact, so a bump to them is verified by the tests passing rather than by the
+  patch-target check — which is why they are not folded in with Harmony.
+
+All three go through `ci.yml` like any other change.
 
 ## Distribution and the Emby plugin catalog
 
