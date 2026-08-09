@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2](https://github.com/anym001/emby-proxy-plugin/compare/v1.1.1...v1.1.2) (2026-08-09)
+
+
+### Bug Fixes
+
+* give release-please a token that can actually trigger release.yml ([9026e08](https://github.com/anym001/emby-proxy-plugin/commit/9026e081de665d1aee838b6f98a2da43c6fabb7b))
+* let workflow_dispatch name an existing tag to recover ([3eca80b](https://github.com/anym001/emby-proxy-plugin/commit/3eca80b51888d2a48006d89cdf340a1f1e22e349))
+
 ## [1.1.1](https://github.com/anym001/emby-proxy-plugin/compare/v1.1.0...v1.1.1) (2026-08-09)
 
 
