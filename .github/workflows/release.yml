@@ -22,19 +22,34 @@ on:
     types: [published]
   # Neither trigger above fires for a tag or release created by a workflow run
   # authenticated with the default GITHUB_TOKEN - GitHub suppresses events
-  # from it to avoid runaway loops, and release-please.yml is exactly such a
-  # run unless it is given a different token. That leaves a real gap: a
-  # release-please release can exist with no DLL attached and nothing to show
-  # for it, silently. This is the manual recovery for that, run against the
-  # tag from the Actions UI - still no version input, for the same reason as
-  # ever: what ships has to be what the repository at that ref says it is.
+  # from it to avoid runaway loops. release-please.yml no longer runs that
+  # way (see its RELEASE_PLEASE_TOKEN), but this is what recovers a release
+  # that already shipped without one, from before that was fixed, or from
+  # any future incident of the same shape.
+  #
+  # GitHub will only let a dispatch target a ref whose own copy of this file
+  # already declares workflow_dispatch - a tag cut before this trigger existed
+  # can never be selected directly, which is exactly the tag that needs
+  # recovering. `tag` is the way around that: dispatch against a ref that
+  # does have the trigger (main, ordinarily), name the existing tag to build
+  # and publish against, and the checkout below fetches that tag's commit
+  # instead of the dispatched ref. This still overrides no version - the
+  # tag-vs-<Version> assertion two steps down runs unconditionally against
+  # whatever `tag` resolves to, so it can only publish what that commit
+  # already claims to be.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Existing tag to build, verify and publish against (e.g. v1.1.1).
+          Leave blank to build the dispatched ref itself.
+        required: false
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  group: release-${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -52,7 +67,10 @@ jobs:
           # On a `release` event, GITHUB_SHA is the tip of the default
           # branch, not the tagged commit - the checkout must be pinned to
           # the tag explicitly or a release event would build the wrong ref.
-          ref: ${{ github.event.release.tag_name || github.ref_name }}
+          # `inputs.tag` takes the same priority on a manual dispatch, so a
+          # recovery run builds the named tag rather than whatever ref it was
+          # started against.
+          ref: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
           # gh release --generate-notes needs the history to diff against the
           # previous tag; the default shallow checkout has none.
           fetch-depth: 0
@@ -60,12 +78,15 @@ jobs:
       # A release is always built against the pinned version. There is no input
       # to override it: the DLL is handed to users, and the Emby version it was
       # verified against has to be the one the repository claims to support.
+      # `inputs.tag` only says which commit to check out and which existing
+      # release to publish to - the assertion below still has the final word
+      # on whether that commit is allowed to claim it.
       - name: Resolve the release inputs
         id: ctx
         env:
           # GITHUB_REF_NAME is the default branch on a `release` event, not
           # the tag - resolve from the release payload first.
-          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < build/emby-version.txt)"
