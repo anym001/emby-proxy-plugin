@@ -20,6 +20,15 @@ on:
   # of failing when that happens.
   release:
     types: [published]
+  # Neither trigger above fires for a tag or release created by a workflow run
+  # authenticated with the default GITHUB_TOKEN - GitHub suppresses events
+  # from it to avoid runaway loops, and release-please.yml is exactly such a
+  # run unless it is given a different token. That leaves a real gap: a
+  # release-please release can exist with no DLL attached and nothing to show
+  # for it, silently. This is the manual recovery for that, run against the
+  # tag from the Actions UI - still no version input, for the same reason as
+  # ever: what ships has to be what the repository at that ref says it is.
+  workflow_dispatch:
 
 permissions:
   contents: write
