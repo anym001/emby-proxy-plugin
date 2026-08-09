@@ -3,7 +3,7 @@
   "_languageName": "Deutsch",
 
   "EditorTitle": "Proxy Router",
-  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Alles läuft darüber, sofern private Netze nicht umgangen oder unten Ausnahmen eingetragen werden.",
+  "EditorDescription": "Leitet ausgehenden HTTP(S)-Traffic des Emby-Kerns (Metadaten-Provider, Remote-Bilder, Untertitel-Downloads) über einen Proxy. Dieser Traffic läuft vollständig darüber, sofern private Netze nicht umgangen oder unten Ausnahmen eingetragen werden. Streaming und Wiedergabe sind nicht betroffen.",
 
   "LabelProxyStatus": "Proxy-Status",
   "LabelPatchStatus": "Patch-Status",

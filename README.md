@@ -1,8 +1,9 @@
 # Emby Proxy Router
 
 A minimal Emby Server plugin with exactly one job: route the outbound HTTP(S) traffic that the
-**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5**.
-Everything goes through it; what does not is something you configure.
+**Emby server core itself** initiates through a configurable proxy — HTTP, HTTPS or **SOCKS5**. All
+of that traffic goes through it; opting part of it out is something you configure. Media streaming
+and playback are a different kind of traffic entirely and are not covered — see below.
 
 ## What this plugin does
 
@@ -14,8 +15,6 @@ Everything goes through it; what does not is something you configure.
   talks to the proxy and to nothing else.
 * **No fallback to a direct connection.** A configured proxy is used; if it cannot be reached, the
   request fails.
-* Routes everything through the proxy by default, with a switch to keep RFC1918 and link-local
-  traffic off it. Loopback is never proxied.
 
 ## What this plugin explicitly does NOT do
 
@@ -61,7 +60,7 @@ Proxy Router: enabled - socks5://192.168.1.10:1080 (auth as user) | private netw
 
 | Field | Meaning |
 | --- | --- |
-| **Enable proxy** | Off = Emby behaves as if the plugin were not installed. |
+| **Enable proxy** | Off = Emby connects directly — which is *not* the same as the plugin being absent, because a proxy set in the environment (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`) is not used either. See "An installed plugin decides the route even when it is switched off" under Known limitations. |
 | **Proxy scheme** | `Http`, `Https` or `Socks5`. Only used when the address carries no scheme of its own. |
 | **Proxy address** | `host:port` (e.g. `192.168.1.10:8080`) or a full URL (e.g. `socks5://192.168.1.10:1080`). A port is mandatory. |
 | **Username / Password** | Optional. Take precedence over credentials embedded in the URL. Credentials *in* the address need the URL form (`http://user:password@host:port`); in the bare `host:port` form there is no scheme to attach them to and the address is rejected. |

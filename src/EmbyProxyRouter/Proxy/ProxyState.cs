@@ -26,7 +26,7 @@ namespace EmbyProxyRouter.Proxy
     /// </remarks>
     public enum RouteReason
     {
-        /// <summary>The plugin is switched off; Emby behaves as if it were not installed.</summary>
+        /// <summary>The plugin is switched off; the request goes out directly.</summary>
         Disabled = 0,
         /// <summary>Enabled, but the configured address does not parse.</summary>
         Misconfigured = 1,
