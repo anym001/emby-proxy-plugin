@@ -3,7 +3,7 @@
   "_languageName": "English",
 
   "EditorTitle": "Proxy Router",
-  "EditorDescription": "Routes outbound HTTP(S) traffic initiated by the Emby core (metadata providers, remote images, subtitle downloads) through a proxy. Everything goes through it unless you bypass private networks or list exceptions below.",
+  "EditorDescription": "Routes outbound HTTP(S) traffic initiated by the Emby core (metadata providers, remote images, subtitle downloads) through a proxy. All of that traffic goes through it unless you bypass private networks or list exceptions below. Media streaming and playback are not affected.",
 
   "LabelProxyStatus": "Proxy status",
   "LabelPatchStatus": "Patch status",

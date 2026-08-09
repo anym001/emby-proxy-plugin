@@ -27,6 +27,35 @@ protected virtual HttpMessageHandler CreateHttpClientHandler(HttpMessageHandlerO
   sufficient.
 * Target framework per `EmbyServer.runtimeconfig.json`: **net8.0**, self-contained on .NET 8.0.25.
 
+## The plugin shell
+
+Two things about `Plugin.cs` are load-bearing rather than incidental.
+
+**The patch is applied from the constructor, not from the server entry point.** Emby builds handlers
+lazily and then caches them per host for the life of the process, so any handler built before the
+patch lands would keep bypassing the proxy until the server restarts. The entry point runs late
+enough for that to happen, and the failure is invisible: traffic on those handlers simply never
+reaches the proxy while the dashboard reports the patch as active.
+
+**The constructor must not throw.** A plugin whose constructor throws is removed from the dashboard
+entirely, which leaves no way to see the error that caused it — the one failure mode with no route
+back to the user. Everything the constructor does is therefore inside a `try`, including resolving
+the log manager: that is the one step whose failure would otherwise throw before there is anything
+left to report the throw with.
+
+### Working against `Emby.Web.GenericEdit`
+
+The settings page is an `EditableObjectBase`, and three of its requirements are compile-time traps
+rather than anything the API documents:
+
+* Overriding `Validate` requires `protected override`, not `protected internal`.
+* `EditMultilineAttribute` takes a required line count — `[EditMultiline(6)]`, never `[EditMultiline]`.
+* Attribute-resolved labels need a public static property on `Strings`; see Localization below.
+
+One more is a C# constraint that shapes an API here: `async` methods cannot take `out` parameters, so
+anything asynchronous that would naturally return two values returns a small result struct instead.
+`ProbeResult` exists for exactly that reason.
+
 ## SOCKS5 feasibility
 
 `WebProxy`/`HttpClientHandler` cannot speak SOCKS at all. `SocketsHttpHandler` can, from .NET 6
@@ -169,6 +198,11 @@ under "Known limitations" instead.
 `OnBeforeShowUI` and `OnOptionsSaved`, and never on a timer. Nothing in `ProxyState` consults it; a
 failure here does not move a single request.
 
+It speaks to a raw `TcpClient` rather than going through `HttpClient`, which is not an optimisation:
+`HttpClient` here means the patched pipeline, so the probe would be checking the proxy by way of the
+proxy — and would fail whenever the gate refuses, which is precisely the configuration it exists to
+diagnose.
+
 It talks to the proxy and to nobody else, stopping before the point where the proxy would open an
 outbound connection:
 
@@ -256,6 +290,45 @@ The accepted cost is that a dead proxy also stops Premiere from validating, and
 that Emby's licensing servers see the proxy's egress address. A user who wants the old behaviour can
 put the hosts in the bypass list; the plugin no longer decides it for them.
 
+## Localization
+
+Strings live in `src/EmbyProxyRouter/Localization/*.json` and are embedded at build time, so there
+are no loose files to deploy. `en.json` is the reference: every key must exist there, and other
+languages fall back to it key by key rather than rendering blank.
+
+**The plugin has no language setting and must not grow one.** The language follows Emby's own
+display language, which the server applies process-wide in `ApplicationHost.SetDefaultThreadCulture`
+— called from the host constructor *and* from `OnConfigurationUpdated`, with no per-request
+localization middleware anywhere in the server. `Localizer` therefore reads
+`CultureInfo.CurrentUICulture` on each lookup, which is what makes the page track the dashboard
+without a restart. A switch of its own would only let the plugin page disagree with the rest of the
+dashboard.
+
+Settings-page labels and descriptions go through `[DisplayNameL(nameof(Strings.X), typeof(Strings))]`,
+which resolves through Emby's `LocalizableString`. That requires `Strings` to expose a **public
+static string property with a getter**: it caches the reflected `PropertyInfo` but re-invokes the
+getter on every read, which is the other half of what makes a live language change work. Runtime
+strings — status text, validation errors — call `Localizer.Get` / `Localizer.Format` directly.
+
+Adding a language is one file: `<code>.json` using the culture code Emby uses (`fr`, `zh-CN`,
+`pt-BR`, …). No csproj entry, no C# change.
+
+### The log is English; only the dashboard is translated
+
+A log line is read by whoever is debugging the server — often not the person whose display language
+is set, and usually after the fact, pasted into an issue or grepped for a phrase out of this
+documentation. Translating it would make that worse for everyone involved. The rule is mechanical so
+it can be checked rather than remembered:
+
+* Keys written to the log are prefixed `Log` and live in **`en.json` alone**, resolved with
+  `Localizer.GetInvariant` / `FormatInvariant` — never `Get` / `Format`. `LogLanguageTests` fails the
+  build if a `Log*` key appears in any other language file.
+* A value reaching **both** audiences — a proxy-address parse error, the endpoint description — is
+  carried as a `LocalizedText` rather than a rendered string, and each sink asks for what it needs:
+  `.Invariant()` for the log, `.Localized()` for the page. Nested `LocalizedText` arguments follow
+  their parent, so a rendered message is in one language throughout.
+* Everything else is a UI string and belongs in every language file.
+
 ## Building
 
 Requirements: **.NET SDK 8.0** plus `curl`, `ar` and `tar`.
@@ -327,7 +400,7 @@ The script reports which part changed — the type, the method, or its return ty
 
 ## Continuous integration
 
-Three workflows plus Dependabot, split along one line: **verifying a change and shipping a
+Four workflows plus Dependabot, split along one line: **verifying a change and shipping a
 deliverable are separate events.** Pull requests are verified; only a tag ships.
 
 ### `ci.yml` — every pull request
@@ -372,6 +445,10 @@ It references the plugin project and, unlike the plugin, copies the Emby assembl
 output with `Private=true`: a test host has no server to supply them. `lib/` still has to be
 populated by `build/fetch-emby-refs.sh` first.
 
+The classes that write `HttpHandlerPatch`'s statics share the `PatchStatics` xUnit collection.
+xUnit runs separate classes in parallel, so a new class touching those fields has to join the
+collection rather than race with the ones already in it.
+
 Two things it deliberately does not cover. The **Harmony patch**, because whether
 `CreateHttpClientHandler` still has the expected shape is a fact about a shipped Emby build rather
 than about this code — `build/verify-patch-target.sh` answers that by decompiling the real assembly.
@@ -385,6 +462,12 @@ It also runs on manual dispatch with an Emby version as input; given none, it us
 `build/emby-version.txt`. The version is the cache key for the fetched assemblies, so only the first
 run per version pays for the ~180 MB download.
 
+That resolution happens in a **step**, not in `env:`, and it has to. `inputs.*` is empty on any event
+that carries no inputs — `pull_request` above all — so an `env:` block reading it would resolve to
+the empty string on every pull request rather than falling back to the pinned file. The step reads
+the input, falls back to `build/emby-version.txt` when it is blank, and everything downstream uses
+what it resolved.
+
 **Only a manual run uploads a DLL**, named `EmbyProxyRouter-emby<version>-<commit>`. That is the
 `release-check.yml` case: a candidate against a *new* Emby version, worth having in hand to try
 against a real server. Pull requests skip the upload — they are asking whether the change is sound,
@@ -395,6 +478,28 @@ is the throwaway merge commit GitHub creates for the run: it belongs to no branc
 resolved once the run is over. The checks still run against that merge, because testing the merge
 result is the point; only the label points at a commit that exists.
 
+### `release-please.yml` — pushes to `main`
+
+The only place the plugin's own `<Version>` changes. It reads the Conventional Commits since the last
+release and maintains a standing pull request that bumps `<Version>` in the csproj and updates
+`CHANGELOG.md`; merging that pull request is what creates the tag and the GitHub Release. `fix:`
+bumps a patch, `feat:` a minor, and a `!` after the type or a `BREAKING CHANGE:` footer a major.
+
+It builds and publishes nothing itself. The release it creates goes through the Releases API rather
+than a tag push, which is exactly the case `release.yml` listens for with `release: published` — so
+the deliverable is produced by that workflow unchanged, and the two need no coupling beyond the tag.
+
+**It must not run on the default `GITHUB_TOKEN`**, and this is the one trap here that has already
+cost a release. GitHub suppresses the events raised by actions taken with that token, so the tag and
+release this workflow creates fired neither of `release.yml`'s triggers: v1.1.1 shipped as a GitHub
+Release with no DLL attached and had to be repaired by hand. It therefore authenticates with
+`RELEASE_PLEASE_TOKEN`, a PAT scoped to this repository alone (Contents + Pull requests, read and
+write), which is not subject to that suppression.
+
+This is also why `ci.yml` does not check whether the plugin's version is already released: the number
+only ever moves here, and never to one that already has a tag, so a per-pull-request check would fail
+every ordinary change sitting between two releases instead of catching a mistake.
+
 ### `release.yml` — tags matching `v*`, or a published release
 
 The only workflow that produces something a user installs. It builds against the pinned Emby version
@@ -404,8 +509,14 @@ verified against has to be the one the repository claims to support — and atta
 
 It repeats CI's verification instead of trusting that a pull request ran it. A tag can be placed on
 any commit, including one that never went through a pull request, and shipping a plugin whose Harmony
-patch no longer matches is the one failure this project cannot afford: it is silent. Publishing uses
-the preinstalled `gh` CLI rather than a third-party action, so it adds no supply chain of its own.
+patch no longer matches is the one failure this project cannot afford: it is silent. Publishing needs
+`contents: write` and uses the preinstalled `gh` CLI rather than a third-party action, so it adds no
+supply chain of its own.
+
+It also asserts that the tag equals `v` + `<Version>` from the csproj and refuses to publish when the
+two disagree. Emby reads the plugin version out of the assembly, so a tag claiming one number while
+the DLL says another produces a release nobody can identify once it is installed. This is the only
+place that assertion is made — see `ci.yml` above for why it is not repeated per pull request.
 
 Cutting a release is one command:
 
@@ -463,12 +574,20 @@ Every action is pinned to a **commit SHA** with the version in a trailing commen
 tag: a tag can be moved to point at different code, a SHA cannot. That is also what makes the grouped
 Dependabot pull request worth having — it is the mechanism that keeps the pins current.
 
-`.github/dependabot.yml` covers the two dependency surfaces this repository actually has. The
-workflow actions are grouped into a single monthly pull request — they move together, and separate
-pull requests would conflict on the same pinned-SHA lines. `Lib.Harmony`, the only NuGet dependency,
-gets its own. Both go through `ci.yml` like any other change, which matters most for Harmony: it is
-embedded into the plugin DLL and patches the CLR at runtime, so a bump is verified by the
-patch-target check before it is taken rather than after.
+`.github/dependabot.yml` covers the three dependency surfaces this repository has, split by what a
+bump can break rather than by ecosystem:
+
+* **The workflow actions**, grouped into a single monthly pull request — they move together, and
+  separate pull requests would conflict on the same pinned-SHA lines.
+* **`Lib.Harmony`**, the plugin's only shipped NuGet dependency, ungrouped and on its own. It is
+  embedded *into* the plugin DLL rather than shipped beside it, so a bump changes the artifact
+  itself, and it patches the CLR at runtime — the part of this plugin with the least margin for a
+  silent regression. The patch-target check is what has to pass before such a bump is taken.
+* **The test project's xunit and VSTest packages**, grouped separately. They ship in nothing and
+  cannot affect the artifact, so a bump to them is verified by the tests passing rather than by the
+  patch-target check — which is why they are not folded in with Harmony.
+
+All three go through `ci.yml` like any other change.
 
 ## Distribution and the Emby plugin catalog
 
@@ -517,13 +636,17 @@ more way for a self-updating plugin to behave unpredictably.
 
 ```
 .github/workflows/ci.yml            actionlint + compile + the verify scripts + tests (pull requests)
+.github/workflows/release-please.yml Maintains the version-bump PR that cuts a release (pushes to main)
 .github/workflows/release.yml       Builds and publishes the DLL to a GitHub Release (tags v*)
 .github/workflows/release-check.yml Finds newer Emby releases, dispatches a CI run against them
 .github/dependabot.yml              Updates for the workflow actions, Lib.Harmony and the test tooling
 .github/ISSUE_TEMPLATE/             Bug report, feature request, private security link
 .github/PULL_REQUEST_TEMPLATE.md    Checklist covering the traps in CONTRIBUTING.md
 ARCHITECTURE.md                     This file
+CHANGELOG.md                        Maintained by release-please; not edited by hand
 CONTRIBUTING.md                     How to build, verify and submit a change
+release-please-config.json          Changelog sections and the csproj the version is bumped in
+.release-please-manifest.json       The last released version, as release-please tracks it
 build/emby-version.txt              The pinned Emby version (single source of truth)
 build/emby-sha256.txt               SHA-256 of the pinned version's package; the other half of the pin
 build/fetch-emby-refs.sh            Fetches the Emby assemblies, verifying that checksum
@@ -543,6 +666,7 @@ src/EmbyProxyRouter/
   Patch/HarmonyLoader.cs      Loads the embedded Harmony assembly
   Patch/HttpHandlerPatch.cs   The postfix patch, including signature verification
   Proxy/ProxyEndpoint.cs      Address parsing, credential relocation
+  Proxy/ProxyScheme.cs        The Http / Https / Socks5 dropdown values
   Proxy/BypassRules.cs        CIDR and host matching
   Proxy/ProxySettings.cs      Immutable configuration snapshot
   Proxy/ProxyState.cs         Routing decision, in one place
