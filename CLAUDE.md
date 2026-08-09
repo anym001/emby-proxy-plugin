@@ -4,14 +4,14 @@ Guidance for Claude Code when working in this repository.
 
 ## What this project is
 
-A single-purpose Emby Server plugin: it routes outbound HTTP(S) traffic initiated by the Emby core
-through an HTTP, HTTPS or SOCKS5 proxy, and blocks that traffic rather than letting it out directly
-when the proxy is unavailable.
+A single-purpose Emby Server plugin that routes the Emby core's own outbound HTTP(S) traffic through
+an HTTP, HTTPS or SOCKS5 proxy, and blocks it rather than letting it out directly when there is no
+usable proxy. `README.md` states the scope precisely.
 
-The scope is deliberately narrow. Before adding anything, check it against the "What this plugin
-explicitly does NOT do" list in `README.md`. Features that would be useful in a general-purpose
-plugin (subtitle handling, metadata enrichment, auto-update, a scheduled task framework) are out of
-scope by design, not by omission.
+**The scope is narrow on purpose.** Before adding anything, check it against "What this plugin
+explicitly does NOT do" in `README.md`. Features that would be useful in a general-purpose plugin
+(subtitle handling, metadata enrichment, auto-update, a scheduled task framework) are out of scope by
+design, not by omission.
 
 ## Language policy
 
@@ -110,15 +110,16 @@ Each is load-bearing and was established by decompiling Emby 4.9.5.0 or by runti
 
 ## Things that are easy to get wrong
 
-* `async` methods cannot take `out` parameters — use a small result struct (see `ProbeResult`).
-* Overriding `EditableObjectBase.Validate` requires `protected override`, not `protected internal`.
-* `EditMultilineAttribute` takes a required line count: `[EditMultiline(6)]`.
-* `ProxyProbe` talks to a raw `TcpClient`, not through `HttpClient`. Sending it through the patched
-  pipeline would have it check the proxy by way of the proxy.
+The traps that cost a build or a silent regression. `ARCHITECTURE.md` explains each — "The plugin
+shell" for the first three, "The settings-page check" for the fourth:
+
+* The plugin constructor must not throw, and the patch is applied from it rather than from the entry
+  point. Do not move it.
+* `EditableObjectBase.Validate` is `protected override`; `EditMultilineAttribute` needs a line count.
+* `async` methods cannot take `out` parameters — return a small struct (see `ProbeResult`).
+* `ProxyProbe` uses a raw `TcpClient`, never `HttpClient`. Do not route it through the pipeline.
 * Log only scheme, host and port for request URLs. Paths and query strings of metadata lookups carry
   title information and API keys.
-* The plugin constructor must not throw. A throwing constructor removes the plugin from the
-  dashboard, leaving no way to see the error.
 
 ## Git
 

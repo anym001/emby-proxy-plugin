@@ -27,6 +27,35 @@ protected virtual HttpMessageHandler CreateHttpClientHandler(HttpMessageHandlerO
   sufficient.
 * Target framework per `EmbyServer.runtimeconfig.json`: **net8.0**, self-contained on .NET 8.0.25.
 
+## The plugin shell
+
+Two things about `Plugin.cs` are load-bearing rather than incidental.
+
+**The patch is applied from the constructor, not from the server entry point.** Emby builds handlers
+lazily and then caches them per host for the life of the process, so any handler built before the
+patch lands would keep bypassing the proxy until the server restarts. The entry point runs late
+enough for that to happen, and the failure is invisible: traffic on those handlers simply never
+reaches the proxy while the dashboard reports the patch as active.
+
+**The constructor must not throw.** A plugin whose constructor throws is removed from the dashboard
+entirely, which leaves no way to see the error that caused it — the one failure mode with no route
+back to the user. Everything the constructor does is therefore inside a `try`, including resolving
+the log manager: that is the one step whose failure would otherwise throw before there is anything
+left to report the throw with.
+
+### Working against `Emby.Web.GenericEdit`
+
+The settings page is an `EditableObjectBase`, and three of its requirements are compile-time traps
+rather than anything the API documents:
+
+* Overriding `Validate` requires `protected override`, not `protected internal`.
+* `EditMultilineAttribute` takes a required line count — `[EditMultiline(6)]`, never `[EditMultiline]`.
+* Attribute-resolved labels need a public static property on `Strings`; see Localization below.
+
+One more is a C# constraint that shapes an API here: `async` methods cannot take `out` parameters, so
+anything asynchronous that would naturally return two values returns a small result struct instead.
+`ProbeResult` exists for exactly that reason.
+
 ## SOCKS5 feasibility
 
 `WebProxy`/`HttpClientHandler` cannot speak SOCKS at all. `SocketsHttpHandler` can, from .NET 6
@@ -168,6 +197,11 @@ under "Known limitations" instead.
 `ProxyProbe` answers one question — is this address really a working proxy? — on demand, from
 `OnBeforeShowUI` and `OnOptionsSaved`, and never on a timer. Nothing in `ProxyState` consults it; a
 failure here does not move a single request.
+
+It speaks to a raw `TcpClient` rather than going through `HttpClient`, which is not an optimisation:
+`HttpClient` here means the patched pipeline, so the probe would be checking the proxy by way of the
+proxy — and would fail whenever the gate refuses, which is precisely the configuration it exists to
+diagnose.
 
 It talks to the proxy and to nobody else, stopping before the point where the proxy would open an
 outbound connection:
