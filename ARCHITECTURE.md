@@ -327,7 +327,7 @@ The script reports which part changed — the type, the method, or its return ty
 
 ## Continuous integration
 
-Three workflows plus Dependabot, split along one line: **verifying a change and shipping a
+Four workflows plus Dependabot, split along one line: **verifying a change and shipping a
 deliverable are separate events.** Pull requests are verified; only a tag ships.
 
 ### `ci.yml` — every pull request
@@ -394,6 +394,28 @@ The commit in that name is the one that was pushed, not `github.sha`. On a pull 
 is the throwaway merge commit GitHub creates for the run: it belongs to no branch and cannot be
 resolved once the run is over. The checks still run against that merge, because testing the merge
 result is the point; only the label points at a commit that exists.
+
+### `release-please.yml` — pushes to `main`
+
+The only place the plugin's own `<Version>` changes. It reads the Conventional Commits since the last
+release and maintains a standing pull request that bumps `<Version>` in the csproj and updates
+`CHANGELOG.md`; merging that pull request is what creates the tag and the GitHub Release. `fix:`
+bumps a patch, `feat:` a minor, and a `!` after the type or a `BREAKING CHANGE:` footer a major.
+
+It builds and publishes nothing itself. The release it creates goes through the Releases API rather
+than a tag push, which is exactly the case `release.yml` listens for with `release: published` — so
+the deliverable is produced by that workflow unchanged, and the two need no coupling beyond the tag.
+
+**It must not run on the default `GITHUB_TOKEN`**, and this is the one trap here that has already
+cost a release. GitHub suppresses the events raised by actions taken with that token, so the tag and
+release this workflow creates fired neither of `release.yml`'s triggers: v1.1.1 shipped as a GitHub
+Release with no DLL attached and had to be repaired by hand. It therefore authenticates with
+`RELEASE_PLEASE_TOKEN`, a PAT scoped to this repository alone (Contents + Pull requests, read and
+write), which is not subject to that suppression.
+
+This is also why `ci.yml` does not check whether the plugin's version is already released: the number
+only ever moves here, and never to one that already has a tag, so a per-pull-request check would fail
+every ordinary change sitting between two releases instead of catching a mistake.
 
 ### `release.yml` — tags matching `v*`, or a published release
 
@@ -517,13 +539,17 @@ more way for a self-updating plugin to behave unpredictably.
 
 ```
 .github/workflows/ci.yml            actionlint + compile + the verify scripts + tests (pull requests)
+.github/workflows/release-please.yml Maintains the version-bump PR that cuts a release (pushes to main)
 .github/workflows/release.yml       Builds and publishes the DLL to a GitHub Release (tags v*)
 .github/workflows/release-check.yml Finds newer Emby releases, dispatches a CI run against them
 .github/dependabot.yml              Updates for the workflow actions, Lib.Harmony and the test tooling
 .github/ISSUE_TEMPLATE/             Bug report, feature request, private security link
 .github/PULL_REQUEST_TEMPLATE.md    Checklist covering the traps in CONTRIBUTING.md
 ARCHITECTURE.md                     This file
+CHANGELOG.md                        Maintained by release-please; not edited by hand
 CONTRIBUTING.md                     How to build, verify and submit a change
+release-please-config.json          Changelog sections and the csproj the version is bumped in
+.release-please-manifest.json       The last released version, as release-please tracks it
 build/emby-version.txt              The pinned Emby version (single source of truth)
 build/emby-sha256.txt               SHA-256 of the pinned version's package; the other half of the pin
 build/fetch-emby-refs.sh            Fetches the Emby assemblies, verifying that checksum
@@ -543,6 +569,7 @@ src/EmbyProxyRouter/
   Patch/HarmonyLoader.cs      Loads the embedded Harmony assembly
   Patch/HttpHandlerPatch.cs   The postfix patch, including signature verification
   Proxy/ProxyEndpoint.cs      Address parsing, credential relocation
+  Proxy/ProxyScheme.cs        The Http / Https / Socks5 dropdown values
   Proxy/BypassRules.cs        CIDR and host matching
   Proxy/ProxySettings.cs      Immutable configuration snapshot
   Proxy/ProxyState.cs         Routing decision, in one place
