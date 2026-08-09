@@ -25,6 +25,11 @@ This is intentional — the point of the project is a single, auditable responsi
 * **No** auto-update mechanism, no telemetry, no phone-home behaviour.
 * **No** system-wide proxy configuration. Only Emby's own HTTP stack is redirected; `ffmpeg`, DLNA,
   client connections and everything else are untouched.
+* **No** proxying of streaming or playback traffic. Video and audio delivered to clients — direct
+  play, direct stream, or transcoding via `ffmpeg` — never passes through the patched HTTP stack and
+  is untouched regardless of whether the proxy is enabled. If the goal is tunnelling IPTV/Live TV
+  playback or watched media through the proxy, this plugin does not do that; only the server's own
+  API-style traffic (metadata, images, subtitles, licence checks) is redirected.
 * **No** proxying of inbound connections. Reverse-proxy operation is a different problem.
 * **No** circumvention of Emby's licence check. Licence traffic goes through the proxy like
   everything else; the plugin neither blocks it nor rewrites it.
@@ -158,8 +163,10 @@ English. Pull requests with translations are welcome — see [CONTRIBUTING.md](C
 
 ## Known limitations
 
-* **Live TV is only partially covered.** Some of its traffic uses HTTP handlers the plugin does not
-  reach, so do not assume Live TV goes through the proxy in full.
+* **Live TV is only partially covered, and never for the stream itself.** Some of its lookup traffic
+  (EPG, channel data) may use HTTP handlers the plugin reaches; the actual video stream from a tuner
+  or IPTV source is delivered via `ffmpeg`/a direct connection and never goes through this plugin —
+  see "What this plugin explicitly does NOT do" above.
 * **The bypass list performs no DNS resolution.** Hostnames are matched literally, and IP rules only
   apply to IP literals.
 * **HTTP(S) proxy authentication is reactive.** .NET sends credentials only after the proxy answers
