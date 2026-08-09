@@ -36,20 +36,24 @@ env:
   TESTS: tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 
 jobs:
-  # Static check on the workflows themselves. Everything else here only reports
-  # a mistake by failing a run that took minutes to get there; a typo in an
-  # expression or a step key is caught in seconds. actionlint runs as a pinned
-  # release binary rather than an action, so it has no supply chain of its own
-  # beyond the download.
+  # Static checks that don't need the Emby assemblies or a compile. Everything else here only
+  # reports a mistake by failing a run that took minutes to get there; a typo in an expression, a
+  # step key, or a commit subject release-please can't parse is caught in seconds instead.
   #
-  # Which is why the download is checksummed. Every action in these workflows is
-  # pinned to a commit SHA precisely because a tag can be moved, and a release
-  # asset can be replaced under its tag the same way - pinning the version but
-  # trusting whatever bytes come back would leave the one hole the SHA pins
-  # exist to close. Update both lines together when Dependabot bumps the version;
-  # the digest is on the release page as actionlint_<version>_checksums.txt.
+  # actionlint runs as a pinned release binary rather than an action, so it has no supply chain of
+  # its own beyond the download - which is why that download is checksummed. Every action in these
+  # workflows is pinned to a commit SHA precisely because a tag can be moved, and a release asset
+  # can be replaced under its tag the same way - pinning the version but trusting whatever bytes
+  # come back would leave the one hole the SHA pins exist to close. Update both lines together when
+  # Dependabot bumps the version; the digest is on the release page as
+  # actionlint_<version>_checksums.txt.
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Only this job reads pull-request metadata (the commit list, for Conventional Commits) - the
+      # workflow-level contents: read stays the default for every other job.
+      pull-requests: read
     env:
       ACTIONLINT_VERSION: 1.7.12
       ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
@@ -65,6 +69,50 @@ jobs:
           echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
           tar -xzf actionlint.tar.gz actionlint
           ./actionlint -color
+
+      # release-please.yml derives the version bump and the changelog section for each commit from
+      # exactly this prefix - and does so leniently: a subject it cannot parse as a Conventional
+      # Commit is silently left out of the changelog and contributes no bump, rather than failing
+      # anything. That makes a malformed message invisible right up until a release ships without
+      # the change it described. Checked here, against the PR's own commits via the API rather than
+      # local git log, because the default checkout has no more history than the merge commit.
+      #
+      # The type list is the one release-please-config.json's changelog-sections knows about; keep
+      # the two in sync. Merge commits are skipped - this repo merges rather than squashes, so a
+      # branch that pulled in main carries one, and it is not a change release-please attributes to
+      # anyone.
+      - name: Conventional Commits
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          pattern='^(feat|fix|refactor|docs|test|ci|build|chore)(\([a-z0-9.-]+\))?!?: .+'
+
+          # Assigned rather than piped into the while loop: a failure of gh api itself has to stop
+          # the script under set -e, and a subshell on the read end of a pipe would swallow that.
+          subjects="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits" --paginate \
+                        --jq '.[].commit.message | split("\n")[0]')"
+
+          failed=0
+          while IFS= read -r subject; do
+            [ -z "$subject" ] && continue
+            case "$subject" in
+              "Merge "*) continue ;;
+            esac
+            if ! [[ "$subject" =~ $pattern ]]; then
+              echo "::error::Not a Conventional Commit, release-please will silently ignore it: $subject"
+              failed=1
+            fi
+          done <<< "$subjects"
+
+          if [ "$failed" != "0" ]; then
+            echo "::error::See CONTRIBUTING.md for the commit message convention."
+            exit 1
+          fi
+
+          echo "All commits follow Conventional Commits."
 
   verify:
     runs-on: ubuntu-latest

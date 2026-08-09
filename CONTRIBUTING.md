@@ -72,6 +72,13 @@ stays as the safety net even though release-please is what normally keeps the tw
 
 ## Conventions
 
+- **Commit subjects are Conventional Commits**: `type(scope)?!: subject`, one of `feat`, `fix`,
+  `refactor`, `docs`, `test`, `ci`, `build` or `chore` — the same set `release-please-config.json`
+  has changelog sections for. `ci.yml` checks every commit in a pull request against this and fails
+  if one doesn't match, because release-please reads exactly this prefix to decide the version bump
+  and changelog section; a subject it can't parse is silently dropped from both rather than
+  rejected, so the check is what stands between a bad subject and a release that's missing a change
+  it should have listed.
 - **English everywhere** — code, comments, YAML, documentation, commit messages, PR titles.
 - **User-visible strings are localized**, never hardcoded. A new UI string goes into `en.json` *and*
   every other language file.

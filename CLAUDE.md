@@ -54,7 +54,11 @@ deliverable are separate events.** Do not merge them back together.
   artifact is not. Do not add the upload back to pull requests. It does **not** check whether the
   plugin's own `<Version>` is already released — `release-please.yml` is the only place that number
   changes, and it never proposes one that already has a tag, so a per-PR check here would just fail
-  every ordinary pull request sitting between two releases instead of catching a mistake.
+  every ordinary pull request sitting between two releases instead of catching a mistake. The `lint`
+  job also checks every commit in the pull request against Conventional Commits, fetched via the API
+  rather than local history because the default checkout has no more of it than the merge commit —
+  release-please silently drops a subject it can't parse from both the bump and the changelog, so
+  this is what catches a malformed one before it ships that way.
 * `release-please.yml` — pushes to `main`. Reads the Conventional Commits since the last release and
   maintains a standing pull request that bumps `<Version>` in the csproj and `CHANGELOG.md`; merging
   that PR is what creates the tag and the GitHub Release. It does not build or publish anything
