@@ -44,27 +44,42 @@ two together; bumping the version alone leaves a pin that cannot be built. A non
 no entry on purpose (that is the new-Emby-release check), reports itself as unverified, and never
 publishes. The bump pull request `ci.yml` opens writes both files.
 
-CI is three workflows plus Dependabot, split on one principle: **verifying a change and shipping a
+CI is four workflows plus Dependabot, split on one principle: **verifying a change and shipping a
 deliverable are separate events.** Do not merge them back together.
 
 * `ci.yml` — pull requests against `main` plus manual dispatch with an optional `emby-version` input.
   Lints, compiles, runs both verify scripts, and runs the tests. `inputs.*` is empty on `pull_request`, which is why
   the version is resolved in a step rather than in `env:`. It uploads a DLL **only on
   `workflow_dispatch`** — a candidate against a new Emby version is worth having; a pull-request
-  artifact is not. Do not add the upload back to pull requests. It also fails a branch whose
-  `<Version>` is already a published tag: that and `release.yml`'s tag assertion are the same
-  invariant approached from the two ends, one before the merge and one before the publish.
+  artifact is not. Do not add the upload back to pull requests. It does **not** check whether the
+  plugin's own `<Version>` is already released — `release-please.yml` is the only place that number
+  changes, and it never proposes one that already has a tag, so a per-PR check here would just fail
+  every ordinary pull request sitting between two releases instead of catching a mistake. The `lint`
+  job also checks every commit in the pull request against Conventional Commits, fetched via the API
+  rather than local history because the default checkout has no more of it than the merge commit —
+  release-please silently drops a subject it can't parse from both the bump and the changelog, so
+  this is what catches a malformed one before it ships that way.
+* `release-please.yml` — pushes to `main`. Reads the Conventional Commits since the last release and
+  maintains a standing pull request that bumps `<Version>` in the csproj and `CHANGELOG.md`; merging
+  that PR is what creates the tag and the GitHub Release. It does not build or publish anything
+  itself — `release.yml` already listens for both `push: tags: v*` **and** `release: published`, the
+  second specifically for a release created through the API rather than a tag push, which is what
+  this produces, and it already uploads to an existing release instead of creating a duplicate. So
+  the release this workflow opens is picked up by `release.yml` unchanged. `fix:` bumps a patch,
+  `feat:` a minor, and a `!` after the type or a `BREAKING CHANGE:` footer a major.
 * `release.yml` — tags matching `v*`, and nothing else. The only workflow that publishes. It repeats
   CI's verification rather than trusting a pull request ran it, because a tag can sit on any commit.
   It has **no version input on purpose**: a released DLL must be built against the version the
   repository claims to support. It asserts that the tag equals `v` + `<Version>` from the csproj and
   refuses the release otherwise — for the same reason turned on the plugin's own version, since Emby
   reads that number out of the assembly and a tag disagreeing with it ships a release nobody can
-  identify once installed. Needs `contents: write`; publishes with the preinstalled `gh` CLI so it
-  pulls in no third-party action.
+  identify once installed. This is now the only place that assertion is made — see `ci.yml` above.
+  Needs `contents: write`; publishes with the preinstalled `gh` CLI so it pulls in no third-party
+  action.
 * `release-check.yml` — finds Emby releases newer than the pinned version and dispatches `ci.yml`
   against them. Emby publishes stable (`4.9.x`) and beta (`4.10.0.x`) in parallel, so selection is by
-  the `prerelease` flag, never by version order.
+  the `prerelease` flag, never by version order. Unrelated to `release-please.yml`: this is about the
+  Emby version pinned in `build/emby-version.txt`, not the plugin's own version.
 * `.github/dependabot.yml` — grouped monthly updates for the workflow actions, `Lib.Harmony`, and the
   test project's xunit/VSTest packages as a separate group. The Emby assemblies come from the .deb,
   not from NuGet, and are not a Dependabot concern.

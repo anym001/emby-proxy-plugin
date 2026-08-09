@@ -57,19 +57,28 @@ without a checksum that matches, so bumping one alone leaves a pin nobody can bu
 than the pinned one has no checksum by design; the script says so and continues, which is what a run
 checking a *new* Emby release needs. Nothing built that way is ever published.
 
-**The plugin's own version lives in the csproj, and the release tag has to match it.** Bump
-`<Version>` in `src/EmbyProxyRouter/EmbyProxyRouter.csproj` in the pull request that prepares a
-release, then tag the merge `v<that value>`. `release.yml` compares the two and refuses to publish
-when they disagree, because Emby takes the plugin version out of the assembly: a tag saying one
-thing while the DLL says another produces a release that is indistinguishable from the previous one
-once installed, and nothing about the build fails to warn you.
+**The plugin's own version lives in the csproj, and the release tag has to match it — but you do not
+bump it.** `release-please.yml` reads the Conventional Commits on `main` and maintains a standing
+pull request that bumps `<Version>` in `src/EmbyProxyRouter/EmbyProxyRouter.csproj` and
+`CHANGELOG.md`. Merging that PR is what creates the tag and the GitHub Release; `release.yml` then
+builds against it as it always has. What determines the bump is the commit type: `fix:` is a patch,
+`feat:` is a minor, and a `!` after the type (`feat!:`, `fix!:`, …) or a `BREAKING CHANGE:` footer is
+a major. Get the type right and the version follows on its own.
 
-CI checks the same thing from the other end and will fail your pull request if `<Version>` is a
-number that has already been released. That is not a complaint about your change — it means the
-version needs bumping before anything else can merge, and the fix is one line.
+`release.yml` still compares the tag against `<Version>` and refuses to publish when they disagree,
+because Emby takes the plugin version out of the assembly: a tag saying one thing while the DLL says
+another produces a release that is indistinguishable from the previous one once installed. That check
+stays as the safety net even though release-please is what normally keeps the two in step.
 
 ## Conventions
 
+- **Commit subjects are Conventional Commits**: `type(scope)?!: subject`, one of `feat`, `fix`,
+  `refactor`, `docs`, `test`, `ci`, `build` or `chore` — the same set `release-please-config.json`
+  has changelog sections for. `ci.yml` checks every commit in a pull request against this and fails
+  if one doesn't match, because release-please reads exactly this prefix to decide the version bump
+  and changelog section; a subject it can't parse is silently dropped from both rather than
+  rejected, so the check is what stands between a bad subject and a release that's missing a change
+  it should have listed.
 - **English everywhere** — code, comments, YAML, documentation, commit messages, PR titles.
 - **User-visible strings are localized**, never hardcoded. A new UI string goes into `en.json` *and*
   every other language file.
