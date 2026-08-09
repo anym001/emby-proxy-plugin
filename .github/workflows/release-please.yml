@@ -29,8 +29,16 @@ jobs:
     name: Release Please
     runs-on: ubuntu-latest
     steps:
+      # Not the default GITHUB_TOKEN, on purpose: GitHub suppresses events triggered by actions
+      # taken with that token, to stop a workflow from re-triggering itself. That silently broke
+      # the split with release.yml - the tag and release this step creates never fired
+      # release.yml's `push: tags` or `release: published`, so v1.1.1 shipped as a GitHub Release
+      # with no DLL attached until it was recovered by hand. RELEASE_PLEASE_TOKEN is a PAT scoped
+      # to just this repository (Contents + Pull requests: read and write), which isn't subject to
+      # that suppression - so the tag and release it creates trigger release.yml normally.
       - name: Run release-please
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
