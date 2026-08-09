@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/anym001/emby-proxy-plugin/compare/v1.1.0...v1.1.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* anchor release-please's manifest to the tag that actually exists ([41c1f8d](https://github.com/anym001/emby-proxy-plugin/commit/41c1f8dcb77cc512e9a99b38ac959fa755c62400))
+* rename the private authority-parsing helper, it collided with Authority ([8926031](https://github.com/anym001/emby-proxy-plugin/commit/8926031dc92e123a465845f1487192ab94896640))
+
 ## [1.1.0](https://github.com/anym001/emby-proxy-plugin/compare/v1.0.1...v1.1.0) (2026-08-08)
 
 
