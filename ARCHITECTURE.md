@@ -608,22 +608,65 @@ touches "plugins that are configured to update automatically"; in 4.9.5.0 there 
 the code path.
 
 Installation downloads `sourceUrl`, verifies `checksum` as the MD5 of the file when one is given, and
-writes it to `PluginsPath/targetFilename`. `sourceUrl` is an arbitrary URL, so Emby would host the
-metadata while the DLL keeps coming from this repository's releases.
+writes it to `PluginsPath/targetFilename`.
 
-`build/catalog-entry.sh` prints the entry to submit:
+### The submission is a web form, not a JSON entry
+
+`sourceUrl` being an arbitrary URL once suggested that Emby would host only the metadata while the
+DLL kept coming from this repository's releases. That is what the *schema* allows and not what the
+*process* does: [Emby's own instructions][catalog-doc] end with "select the dll file from your local
+computer and save. This will upload the dll and make it available in the plug-in catalog." **Emby
+hosts the binary.** There is no JSON submission and no field into which a `sourceUrl` is pasted.
+
+The steps, in order:
+
+1. A beta thread in the community plugins forum with the DLL attached, and enough iterations of real
+   testing behind it. This is a gate, not a formality — the standing answer to a request to be added
+   is "start by providing a binary here in the community. Once it's been given a little testing then
+   we can look at adding it to the catalog."
+2. A developer id, by PM to `ebr` or a post in the developer forum.
+3. The package form at <https://plugins.emby.tv/admin/packages.html>, which asks for name, guid,
+   short description, overview, website, a 16x9 thumb, a preview image, target system, package type
+   (`Userinstalled`), category, tile colour and target filename.
+4. A version upload per release: version number matching the assembly, class (`Dev`/`Beta`/`Release`),
+   a change description, the minimum server version, and the DLL itself.
+
+The two images are in the repository: `src/EmbyProxyRouter/thumb.png` is the 16x9 tile (the same file
+the csproj embeds, so the catalog and the dashboard cannot disagree), and `docs/catalog/preview.png`
+is a screenshot of the settings page taken against a real 4.9.5.0 server — `docs/catalog/README.md`
+records how, and when it has to be retaken.
+
+Everything else on that form is Emby's to accept, so nothing here can pre-fill it. What this
+repository *can* do is keep the fields that have to agree with the assembly in one place:
 
 ```bash
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
-./build/catalog-entry.sh v1.0.0 > catalog-entry.json
+./build/catalog-entry.sh v1.0.0
 ```
 
-It is a generator rather than a committed file because `versionStr`, `checksum` and `sourceUrl` change
-with every release, and a stored copy would be stale the moment it was written. Three fields in its
-output are Emby's to confirm on submission rather than facts read out of the assemblies: `id` is
-assigned by them and is omitted, `type` is compared as a free-form string against whatever the
-dashboard requests, and `classification` is emitted as `"Release"` because the client-side enum is
-`Release | Beta | Dev`.
+Read its output as a record of the facts, not as something to submit. `name`, `guid`, `versionStr`,
+`requiredVersionStr` and `targetFilename` are read out of the build and get copied into the form;
+`sourceUrl` and `checksum` describe this repository's releases and match no field on it; `category`
+is a dropdown there; `id` is assigned by Emby; and `classification` is emitted as `"Release"` because
+the client-side enum is `Release | Beta | Dev`. It stays a generator rather than a committed file
+because `versionStr` and `checksum` change with every release, and a stored copy would be stale the
+moment it was written.
+
+The catalog *host* is worth re-checking before a submission: the constant compiled into
+`InstallationManager` is `mb3admin.com`, while the admin front-end is served from `plugins.emby.tv`.
+Both may front the same service, but nothing here has verified that.
+
+[catalog-doc]: https://dev.emby.media/doc/plugins/dev/Getting-your-plug-in-in-the-catalog.html
+
+### What the Development Policy requires of this plugin
+
+[The policy][policy] bans, among other things, "including or otherwise distributing code or libraries
+in a manner that violates the license terms of those particular libraries or the license terms of
+Emby". This plugin embeds Harmony, so every copy of the DLL is a copy of an MIT-licensed library, and
+MIT wants its notice carried along. `THIRD-PARTY-NOTICES.md` is that notice, and the csproj embeds it
+in the DLL as well so it travels with a binary that has been separated from this repository.
+
+[policy]: https://github.com/MediaBrowser/Emby/wiki/Development-Policy
 
 Two consequences worth weighing before pursuing this. The update task is unconditional, so accepting a
 catalog entry means the plugin replaces its own binary on a schedule, driven by a record held by a
@@ -645,6 +688,9 @@ more way for a self-updating plugin to behave unpredictably.
 ARCHITECTURE.md                     This file
 CHANGELOG.md                        Maintained by release-please; not edited by hand
 CONTRIBUTING.md                     How to build, verify and submit a change
+THIRD-PARTY-NOTICES.md              The MIT notice for the embedded Harmony; embedded in the DLL too
+docs/catalog/preview.png            Settings-page screenshot for the catalog's preview image
+docs/catalog/README.md              What the catalog images are and how preview.png was produced
 release-please-config.json          Changelog sections and the csproj the version is bumped in
 .release-please-manifest.json       The last released version, as release-please tracks it
 build/emby-version.txt              The pinned Emby version (single source of truth)

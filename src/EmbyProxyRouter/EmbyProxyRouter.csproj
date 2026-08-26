@@ -107,6 +107,19 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!--
+    The MIT notice for the embedded Harmony. Harmony is not deployed beside the plugin, it is
+    compiled into it, so the deliverable is itself a copy of Harmony and MIT requires the notice to
+    be included in it. A file that only exists in the repository would not travel with a DLL
+    downloaded from a release or handed out by Emby's catalog; an embedded one does.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md">
+      <LogicalName>EmbyProxyRouter.THIRD-PARTY-NOTICES.md</LogicalName>
+      <Visible>false</Visible>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <Target Name="VerifyEmbyRefs" BeforeTargets="BeforeBuild">
     <Error Condition="!Exists('$(EmbyLibDir)\MediaBrowser.Controller.dll')"
            Text="Emby reference assemblies not found in '$(EmbyLibDir)'. Run build/fetch-emby-refs.sh first." />

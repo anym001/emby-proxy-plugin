@@ -51,6 +51,16 @@ real as well.
 signature no longer matches never applies: the plugin installs cleanly, reports no error, and
 silently routes nothing.
 
+**A new bundled dependency is a new licence obligation.** Harmony is not deployed beside the plugin,
+it is compiled into it, so `EmbyProxyRouter.dll` is itself a copy of an MIT-licensed library.
+`THIRD-PARTY-NOTICES.md` carries that notice and the csproj embeds it in the DLL so it travels with a
+binary handed out on its own. Anything else that ends up inside the output goes in that file too —
+Emby's plugin Development Policy makes a licence violation grounds for removal from the catalog.
+
+**`docs/catalog/preview.png` shows the settings page, so changing that page dates it.** It is the
+image Emby's catalog form asks for. If you change `PluginOptions` or the status lines, retake it —
+`docs/catalog/README.md` says how it was produced.
+
 **The pinned Emby version is two files, not one.** `build/emby-version.txt` and the matching entry in
 `build/emby-sha256.txt` are changed together — the fetch script refuses to extract the pinned version
 without a checksum that matches, so bumping one alone leaves a pin nobody can build. A version other
