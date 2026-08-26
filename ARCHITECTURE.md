@@ -420,9 +420,9 @@ Not "the build" — it never publishes anything — but the set of assertions th
   otherwise break silently — the build succeeds either way.
 
   The notice check looks for the resource name in the assembly's string heap rather than anywhere in
-  the file, which is not pedantry: the notice's own text names its resource, that text is embedded,
-  so a plain substring search finds the right name inside a DLL whose csproj declares a mistyped one.
-  It was written that way first and passed against exactly that break.
+  the file, and the distinction is load-bearing: the notice's own text names its resource, and that
+  text is embedded, so a plain substring search finds the right name inside a DLL whose csproj
+  declares a mistyped one.
 * `dotnet test` on `tests/EmbyProxyRouter.Tests` — the plugin's own logic (see below).
 
 Those checks answer two different questions and neither substitutes for the other. The tests decide
@@ -620,11 +620,13 @@ writes it to `PluginsPath/targetFilename`.
 
 ### The submission is a web form, not a JSON entry
 
-`sourceUrl` being an arbitrary URL once suggested that Emby would host only the metadata while the
-DLL kept coming from this repository's releases. That is what the *schema* allows and not what the
-*process* does: [Emby's own instructions][catalog-doc] end with "select the dll file from your local
-computer and save. This will upload the dll and make it available in the plug-in catalog." **Emby
-hosts the binary.** There is no JSON submission and no field into which a `sourceUrl` is pasted.
+**Emby hosts the binary.** [Emby's own instructions][catalog-doc] end with "select the dll file from
+your local computer and save. This will upload the dll and make it available in the plug-in catalog."
+There is no JSON submission and no field into which a `sourceUrl` is pasted.
+
+The `sourceUrl` field is worth a note precisely because it invites the opposite conclusion: the
+*schema* takes an arbitrary URL, so it reads as though Emby could host the metadata while the DLL
+comes from this repository's releases. The *process* offers no way to do that.
 
 The steps, in order:
 

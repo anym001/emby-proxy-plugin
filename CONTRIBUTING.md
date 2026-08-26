@@ -92,6 +92,12 @@ stays as the safety net even though release-please is what normally keeps the tw
   rejected, so the check is what stands between a bad subject and a release that's missing a change
   it should have listed.
 - **English everywhere** — code, comments, YAML, documentation, commit messages, PR titles.
+- **Documentation and comments are present tense.** Describe what the code does now and why it has
+  to be that way, not what it used to do or what an earlier attempt got wrong. A sentence about the
+  past can never become false, so nothing ever prompts anyone to revisit it. Rationale is welcome
+  and is a statement about the present: "the check reads the string heap, because a substring search
+  would match the notice's own text" — not "a substring search was tried first". The history belongs
+  in the commit message, where it stays accurate because nothing edits it afterwards.
 - **User-visible strings are localized**, never hardcoded. A new UI string goes into `en.json` *and*
   every other language file.
 - **The Emby log stays English**, whatever the dashboard language is set to — a log line is usually

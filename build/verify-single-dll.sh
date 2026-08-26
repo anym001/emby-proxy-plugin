@@ -71,11 +71,10 @@ fi
 # Matched against the metadata entry, not just "these bytes appear somewhere".
 # Manifest resource names sit NUL-terminated in the assembly's string heap, so
 # turning NULs into newlines puts each one on a line of its own and -x pins the
-# match to a whole line. A plain substring search is not good enough here and
-# quietly was not: the notice's own text mentions its resource name, that text is
-# embedded, and so the correct name is findable inside the DLL even when the
-# csproj declares a mistyped one - which is precisely the case this exists to
-# catch.
+# match to a whole line. A plain substring search does not work here: the notice's
+# own text mentions its resource name, that text is embedded, and so the correct
+# name is findable inside the DLL even when the csproj declares a mistyped one -
+# which is precisely the case this exists to catch.
 #
 # Not `grep -q`: it exits on the first match, tr takes SIGPIPE, and `set -o
 # pipefail` then reports the whole pipeline as failed - turning a found notice
