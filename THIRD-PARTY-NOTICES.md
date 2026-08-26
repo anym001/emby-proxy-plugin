@@ -6,7 +6,7 @@ travel with those copies, and it is embedded in the DLL as well
 (`EmbyProxyRouter.THIRD-PARTY-NOTICES.md`) so that a binary separated from this repository still
 carries it.
 
-## Harmony (Lib.Harmony) 2.4.2
+## Harmony (Lib.Harmony)
 
 Harmony is the runtime patching library the plugin uses to attach itself to Emby's HTTP handler
 factory. It is compiled into `EmbyProxyRouter.dll` as an embedded `0Harmony.dll` and loaded from
@@ -16,6 +16,13 @@ Harmony.
 * Author: Andreas Pardeike
 * Project: <https://github.com/pardeike/Harmony>
 * License: MIT
+
+**The version is deliberately not repeated here.** It is pinned in the `Lib.Harmony`
+`PackageReference` in `src/EmbyProxyRouter/EmbyProxyRouter.csproj`, and Dependabot bumps it on a
+schedule — a number written down a second time would be wrong from the first bump onwards, in a pull
+request nobody would think to check a licence file against. Nothing about the notice depends on it:
+the copyright holder and the licence text below are the same for every version, which is all MIT
+asks to be carried along.
 
 ```
 MIT License

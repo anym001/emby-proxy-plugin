@@ -633,16 +633,19 @@ The steps, in order:
 
 The two images are in the repository: `src/EmbyProxyRouter/thumb.png` is the 16x9 tile (the same file
 the csproj embeds, so the catalog and the dashboard cannot disagree), and `docs/catalog/preview.png`
-is a screenshot of the settings page taken against a real 4.9.5.0 server — `docs/catalog/README.md`
-records how, and when it has to be retaken.
+is a screenshot of the settings page taken against a real server running the pinned Emby version —
+`docs/catalog/README.md` records how, and when it has to be retaken.
 
 Everything else on that form is Emby's to accept, so nothing here can pre-fill it. What this
 repository *can* do is keep the fields that have to agree with the assembly in one place:
 
 ```bash
 dotnet build -c Release src/EmbyProxyRouter/EmbyProxyRouter.csproj
-./build/catalog-entry.sh v1.0.0
+./build/catalog-entry.sh
 ```
+
+Given no argument it derives the tag from `<Version>` in the csproj, which is what `release.yml`
+publishes — so the usual invocation names no version at all.
 
 Read its output as a record of the facts, not as something to submit. `name`, `guid`, `versionStr`,
 `requiredVersionStr` and `targetFilename` are read out of the build and get copied into the form;
