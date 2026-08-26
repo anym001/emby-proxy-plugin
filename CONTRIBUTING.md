@@ -56,6 +56,8 @@ it is compiled into it, so `EmbyProxyRouter.dll` is itself a copy of an MIT-lice
 `THIRD-PARTY-NOTICES.md` carries that notice and the csproj embeds it in the DLL so it travels with a
 binary handed out on its own. Anything else that ends up inside the output goes in that file too —
 Emby's plugin Development Policy makes a licence violation grounds for removal from the catalog.
+`verify-single-dll.sh` fails the build if the notice stops being embedded, so this is checked rather
+than remembered.
 
 **`docs/catalog/preview.png` shows the settings page, so changing that page dates it.** It is the
 image Emby's catalog form asks for. If you change `PluginOptions` or the status lines, retake it —

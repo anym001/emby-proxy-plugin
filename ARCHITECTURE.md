@@ -342,7 +342,9 @@ dotnet test -c Release tests/EmbyProxyRouter.Tests/EmbyProxyRouter.Tests.csproj
 
 Result: `src/EmbyProxyRouter/bin/Release/EmbyProxyRouter.dll` — a **single** file. Harmony is
 included as an embedded resource and loaded at runtime, so no `0Harmony.dll` is copied alongside it.
-`verify-single-dll.sh` asserts exactly that, and CI and the release workflow run the same script.
+`verify-single-dll.sh` asserts exactly that, and CI and the release workflow run the same script. It
+also asserts that `THIRD-PARTY-NOTICES.md` is embedded, since bundling Harmony this way is what makes
+that notice a licence obligation in the first place.
 
 ### Why the reference DLLs are not in the repository
 
@@ -413,8 +415,14 @@ Not "the build" — it never publishes anything — but the set of assertions th
   catches a change which simply does not build.
 * `build/verify-patch-target.sh` — the assertion that actually matters (see above).
 * `build/verify-single-dll.sh` — the output is still one self-contained file: no `0Harmony.dll` next
-  to it, not suspiciously small. That property is what makes deployment a one-file copy, and it
-  would otherwise break silently.
+  to it, not suspiciously small, and Harmony's MIT notice embedded in it. Those properties are what
+  make deployment a one-file copy and keep the bundled library's licence satisfied, and both would
+  otherwise break silently — the build succeeds either way.
+
+  The notice check looks for the resource name in the assembly's string heap rather than anywhere in
+  the file, which is not pedantry: the notice's own text names its resource, that text is embedded,
+  so a plain substring search finds the right name inside a DLL whose csproj declares a mistyped one.
+  It was written that way first and passed against exactly that break.
 * `dotnet test` on `tests/EmbyProxyRouter.Tests` — the plugin's own logic (see below).
 
 Those checks answer two different questions and neither substitutes for the other. The tests decide
@@ -700,7 +708,7 @@ build/emby-version.txt              The pinned Emby version (single source of tr
 build/emby-sha256.txt               SHA-256 of the pinned version's package; the other half of the pin
 build/fetch-emby-refs.sh            Fetches the Emby assemblies, verifying that checksum
 build/verify-patch-target.sh        Asserts the patched method still matches
-build/verify-single-dll.sh          Asserts the output is still one self-contained file
+build/verify-single-dll.sh          Asserts one self-contained file, with the MIT notice inside it
 build/catalog-entry.sh              Generates the package entry for Emby's plugin catalog
 lib/                                Target folder for the assemblies (not committed)
 src/EmbyProxyRouter/
