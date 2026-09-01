@@ -51,6 +51,16 @@ real as well.
 signature no longer matches never applies: the plugin installs cleanly, reports no error, and
 silently routes nothing.
 
+**A new bundled dependency is a new licence obligation.** Harmony is compiled into
+`EmbyProxyRouter.dll`, so the DLL is itself a copy of an MIT-licensed library and
+`THIRD-PARTY-NOTICES.md` is embedded in it. Anything else that ends up inside the output goes in that
+file too — Emby's Development Policy makes a licence violation grounds for removal from the catalog.
+`verify-single-dll.sh` fails the build if the notice stops being embedded.
+
+**`docs/catalog/preview.png` shows the settings page.** It is the image Emby's catalog form asks
+for, so changing `PluginOptions` or the status lines means retaking it. [ARCHITECTURE.md](ARCHITECTURE.md)
+gives the procedure under "Distribution and the Emby plugin catalog".
+
 **The pinned Emby version is two files, not one.** `build/emby-version.txt` and the matching entry in
 `build/emby-sha256.txt` are changed together — the fetch script refuses to extract the pinned version
 without a checksum that matches, so bumping one alone leaves a pin nobody can build. A version other
@@ -80,6 +90,11 @@ stays as the safety net even though release-please is what normally keeps the tw
   rejected, so the check is what stands between a bad subject and a release that's missing a change
   it should have listed.
 - **English everywhere** — code, comments, YAML, documentation, commit messages, PR titles.
+- **Documentation and comments are present tense.** Describe what the code does now and why it has
+  to be that way, not what it used to do. A sentence about the past can never become false, so
+  nothing prompts anyone to revisit it. Rationale stays — it is a statement about the present: "the
+  check reads the string heap, because a substring search would match the notice's own text", not "a
+  substring search was tried first". History belongs in the commit message.
 - **User-visible strings are localized**, never hardcoded. A new UI string goes into `en.json` *and*
   every other language file.
 - **The Emby log stays English**, whatever the dashboard language is set to — a log line is usually

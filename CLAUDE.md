@@ -20,6 +20,26 @@ design, not by omission.
 * **User-visible UI strings are localized**, not hardcoded. See "Localization rules" below.
 * Conversation with the repository owner is in German. That never changes what lands in the repo.
 
+## Documentation is present tense
+
+**Write what is true now, not how it came to be true.** Documentation and comments describe the
+current state: what a thing does, what it requires, why it has to be that way. They do not record
+what it used to do or what an earlier attempt got wrong.
+
+The reason is upkeep. A sentence about the past can never become false, so nothing prompts anyone to
+revisit it, and it accumulates until the reader has to work out which paragraphs still apply. A
+sentence about the present is checked against the code every time someone reads it. History belongs
+in commit messages, which stay accurate because nothing edits them afterwards.
+
+**Rationale stays** — it is the most valuable thing in `ARCHITECTURE.md`, and it is a statement about
+the present. Write "the check reads the string heap, because the notice's own text names its resource
+and a substring search would match that instead", not "a substring search was tried first".
+
+**The history of something outside this repository also stays.** That the patched Emby method once
+returned `HttpClientHandler` is the evidence that an internal method can change under the plugin —
+the reason `verify-patch-target.sh` exists, and what someone debugging "Mod failed" needs. The test
+is whether a reader needs the fact to act now, not whether the sentence has a past tense in it.
+
 ## Build and test
 
 ```bash
@@ -35,10 +55,10 @@ them, and never commit build output.
 
 ## Where documentation goes, and why this file repeats none of it
 
-Each fact lives in exactly one place. When two files carried the same explanation they drifted —
-this file once said CI was four workflows while `ARCHITECTURE.md` said three — so the rule is now
-mechanical: **do not restate here what one of the three documents already says.** Read the document
-instead, and if a fact is wrong or missing, fix it there rather than adding a second copy here.
+Each fact lives in exactly one place. Two files carrying the same explanation drift, and the copy
+nobody is looking at is the one that goes wrong, so the rule is mechanical: **do not restate here
+what one of the three documents already says.** Read the document instead, and if a fact is wrong or
+missing, fix it there rather than adding a second copy here.
 
 * **`README.md` is the general description for end users**: what the plugin does and does not do,
   installing it, the settings table, what happens when the proxy is down, known limitations. No

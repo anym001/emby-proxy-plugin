@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# Prints the package entry for Emby's plugin catalog.
+# Prints this plugin's facts in the shape of an Emby catalog package entry.
 #
-# Emby has no support for third-party plugin repositories: the catalog URL is
-# compiled into Emby.Server.Implementations.Updates.InstallationManager
-# (https://www.mb3admin.com/admin/service/EmbyPackages.json) and cannot be
-# pointed anywhere else. Getting UI updates therefore means submitting this
-# entry to Emby and having them host it. Nothing in this repository can do that
-# on its own, which is why this is a generator rather than a committed file.
+# Not a submission format: Emby takes no JSON, only a web form that ends by
+# uploading the DLL. The output is useful for the fields that have to agree with
+# the assembly - name, guid, versionStr, requiredVersionStr, targetFilename -
+# read out of the build rather than retyped. `sourceUrl` and `checksum` describe
+# this repository's releases and match no field on the form, and `category` is a
+# dropdown there. ARCHITECTURE.md, "Distribution and the Emby plugin catalog",
+# has the process and the two images it also asks for.
 #
-# It is a generator for a second reason: versionStr and checksum change with
-# every release, and a checked-in copy of them would be wrong the moment it was
-# written. Run this against the artifact that is actually being published.
+# A generator rather than a committed file: versionStr and checksum change with
+# every release. Run it against the artifact being published.
 #
 # Usage:  ./build/catalog-entry.sh [tag]
 # Default tag is v<version from the csproj>, which is what release.yml publishes.

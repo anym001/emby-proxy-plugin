@@ -204,6 +204,10 @@ redistribute, and modify the software — but if you pass on a (modified) versio
 compiled DLL, you must make the complete corresponding source available under the same license
 (GPL §6). The full text is in [`LICENSE`](LICENSE).
 
+`EmbyProxyRouter.dll` also contains [Harmony](https://github.com/pardeike/Harmony), which is MIT
+licensed. Its notice is in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and inside the DLL, so
+passing the file on passes the notice with it.
+
 Copyright (C) 2026 anym001
 
 ---
