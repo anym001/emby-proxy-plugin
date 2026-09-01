@@ -22,31 +22,23 @@ design, not by omission.
 
 ## Documentation is present tense
 
-**Write what is true now, not how it came to be true.** Documentation, comments and the reasoning
-attached to them describe the current state: what a thing does, what it requires, why it has to be
-that way. They do not record what it used to do, what an earlier attempt got wrong, or what was
-tried on the way.
+**Write what is true now, not how it came to be true.** Documentation and comments describe the
+current state: what a thing does, what it requires, why it has to be that way. They do not record
+what it used to do or what an earlier attempt got wrong.
 
-The reason is upkeep, not style. A sentence about the past has no way to become false, so nothing
-ever prompts anyone to revisit it, and it accumulates until the reader has to work out which
-paragraphs still apply. A sentence about the present is checked against the code every time someone
-reads it.
+The reason is upkeep. A sentence about the past can never become false, so nothing prompts anyone to
+revisit it, and it accumulates until the reader has to work out which paragraphs still apply. A
+sentence about the present is checked against the code every time someone reads it. History belongs
+in commit messages, which stay accurate because nothing edits them afterwards.
 
-This is not an instruction to drop rationale — rationale is the most valuable thing in
-`ARCHITECTURE.md`. Rationale is a statement about the present too. Write "the check reads the string
-heap, because the notice's own text names its resource and a substring search would match that
-instead", not "a substring search was tried first and passed against a mistyped name". The first
-survives; the second is a diary entry.
+**Rationale stays** — it is the most valuable thing in `ARCHITECTURE.md`, and it is a statement about
+the present. Write "the check reads the string heap, because the notice's own text names its resource
+and a substring search would match that instead", not "a substring search was tried first".
 
-Git already holds the history, and holds it better: commit messages and diffs are where a change is
-explained, and they stay accurate because nothing edits them afterwards.
-
-**One thing this does not cover: the history of something outside this repository.** That the patched
-Emby method once returned `HttpClientHandler` is not a diary entry — it is the evidence that an
-internal method can change under the plugin, which is the entire reason `verify-patch-target.sh`
-exists, and it tells someone debugging "Mod failed" what they are looking at. Keep it. The test is
-whether a reader needs the fact to understand what to do now, not whether the sentence has a past
-tense in it.
+**The history of something outside this repository also stays.** That the patched Emby method once
+returned `HttpClientHandler` is the evidence that an internal method can change under the plugin —
+the reason `verify-patch-target.sh` exists, and what someone debugging "Mod failed" needs. The test
+is whether a reader needs the fact to act now, not whether the sentence has a past tense in it.
 
 ## Build and test
 

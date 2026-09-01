@@ -108,10 +108,9 @@
   </ItemGroup>
 
   <!--
-    The MIT notice for the embedded Harmony. Harmony is not deployed beside the plugin, it is
-    compiled into it, so the deliverable is itself a copy of Harmony and MIT requires the notice to
-    be included in it. A file that only exists in the repository would not travel with a DLL
-    downloaded from a release or handed out by Emby's catalog; an embedded one does.
+    Harmony is compiled into the plugin, so the DLL is itself a copy of an MIT-licensed library and
+    has to carry its notice. Embedded rather than left in the repository: a DLL downloaded from a
+    release, or handed out by Emby's catalog, arrives on its own.
   -->
   <ItemGroup>
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md">

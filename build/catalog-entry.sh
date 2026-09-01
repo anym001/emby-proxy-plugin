@@ -2,31 +2,16 @@
 #
 # Prints this plugin's facts in the shape of an Emby catalog package entry.
 #
-# Read this before using the output: THIS IS NOT THE SUBMISSION FORMAT. Emby
-# does not accept a JSON entry. Getting into the catalog means asking for a
-# developer id (a PM to `ebr`, or a post in the developer forum) and then
-# filling in a web form at https://plugins.emby.tv/admin/packages.html, which
-# ends by uploading the DLL from your machine - Emby hosts the binary itself.
-# So `sourceUrl` and `checksum` below describe this repository's own releases
-# and correspond to no field in that form, and `category` is a dropdown there
-# rather than a string you supply.
+# Not a submission format: Emby takes no JSON, only a web form that ends by
+# uploading the DLL. The output is useful for the fields that have to agree with
+# the assembly - name, guid, versionStr, requiredVersionStr, targetFilename -
+# read out of the build rather than retyped. `sourceUrl` and `checksum` describe
+# this repository's releases and match no field on the form, and `category` is a
+# dropdown there. ARCHITECTURE.md, "Distribution and the Emby plugin catalog",
+# has the process and the two images it also asks for.
 #
-# What the output is good for is the half the form asks for that has to agree
-# with the assembly - name, guid, versionStr, requiredVersionStr,
-# targetFilename - collected in one place and read out of the build rather
-# than retyped from memory. Copy those across, and keep the rest as a record
-# of what was submitted.
-#
-# It stays a generator rather than a committed file because versionStr and
-# checksum change with every release, and a checked-in copy would be wrong the
-# moment it was written. Run it against the artifact actually being published.
-#
-# The form is also not the whole submission. Emby asks for a beta thread in the
-# community forum with a DLL attached and real testing behind it before a
-# plugin is considered at all, plus two images: the 16x9 tile
-# (src/EmbyProxyRouter/thumb.png, the same one embedded in the DLL) and a
-# preview screenshot (docs/catalog/preview.png). See ARCHITECTURE.md,
-# "Distribution and the Emby plugin catalog".
+# A generator rather than a committed file: versionStr and checksum change with
+# every release. Run it against the artifact being published.
 #
 # Usage:  ./build/catalog-entry.sh [tag]
 # Default tag is v<version from the csproj>, which is what release.yml publishes.

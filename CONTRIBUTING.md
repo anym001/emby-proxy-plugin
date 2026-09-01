@@ -51,17 +51,15 @@ real as well.
 signature no longer matches never applies: the plugin installs cleanly, reports no error, and
 silently routes nothing.
 
-**A new bundled dependency is a new licence obligation.** Harmony is not deployed beside the plugin,
-it is compiled into it, so `EmbyProxyRouter.dll` is itself a copy of an MIT-licensed library.
-`THIRD-PARTY-NOTICES.md` carries that notice and the csproj embeds it in the DLL so it travels with a
-binary handed out on its own. Anything else that ends up inside the output goes in that file too —
-Emby's plugin Development Policy makes a licence violation grounds for removal from the catalog.
-`verify-single-dll.sh` fails the build if the notice stops being embedded, so this is checked rather
-than remembered.
+**A new bundled dependency is a new licence obligation.** Harmony is compiled into
+`EmbyProxyRouter.dll`, so the DLL is itself a copy of an MIT-licensed library and
+`THIRD-PARTY-NOTICES.md` is embedded in it. Anything else that ends up inside the output goes in that
+file too — Emby's Development Policy makes a licence violation grounds for removal from the catalog.
+`verify-single-dll.sh` fails the build if the notice stops being embedded.
 
-**`docs/catalog/preview.png` shows the settings page, so changing that page dates it.** It is the
-image Emby's catalog form asks for. If you change `PluginOptions` or the status lines, retake it —
-`docs/catalog/README.md` says how it was produced.
+**`docs/catalog/preview.png` shows the settings page.** It is the image Emby's catalog form asks
+for, so changing `PluginOptions` or the status lines means retaking it. [ARCHITECTURE.md](ARCHITECTURE.md)
+gives the procedure under "Distribution and the Emby plugin catalog".
 
 **The pinned Emby version is two files, not one.** `build/emby-version.txt` and the matching entry in
 `build/emby-sha256.txt` are changed together — the fetch script refuses to extract the pinned version
@@ -93,11 +91,10 @@ stays as the safety net even though release-please is what normally keeps the tw
   it should have listed.
 - **English everywhere** — code, comments, YAML, documentation, commit messages, PR titles.
 - **Documentation and comments are present tense.** Describe what the code does now and why it has
-  to be that way, not what it used to do or what an earlier attempt got wrong. A sentence about the
-  past can never become false, so nothing ever prompts anyone to revisit it. Rationale is welcome
-  and is a statement about the present: "the check reads the string heap, because a substring search
-  would match the notice's own text" — not "a substring search was tried first". The history belongs
-  in the commit message, where it stays accurate because nothing edits it afterwards.
+  to be that way, not what it used to do. A sentence about the past can never become false, so
+  nothing prompts anyone to revisit it. Rationale stays — it is a statement about the present: "the
+  check reads the string heap, because a substring search would match the notice's own text", not "a
+  substring search was tried first". History belongs in the commit message.
 - **User-visible strings are localized**, never hardcoded. A new UI string goes into `en.json` *and*
   every other language file.
 - **The Emby log stays English**, whatever the dashboard language is set to — a log line is usually

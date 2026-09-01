@@ -1,28 +1,23 @@
 # Third-party notices
 
-`EmbyProxyRouter.dll` is a single self-contained file, which means the third-party code it uses is
-*inside* the deliverable rather than sitting next to it. This file is the notice that MIT requires to
-travel with those copies, and it is embedded in the DLL as well
-(`EmbyProxyRouter.THIRD-PARTY-NOTICES.md`) so that a binary separated from this repository still
-carries it.
+`EmbyProxyRouter.dll` is a single self-contained file: the third-party code it uses is inside the
+deliverable, not beside it. This file is the notice MIT requires to travel with those copies, and it
+is embedded in the DLL so a binary separated from this repository still carries it.
 
 ## Harmony (Lib.Harmony)
 
 Harmony is the runtime patching library the plugin uses to attach itself to Emby's HTTP handler
 factory. It is compiled into `EmbyProxyRouter.dll` as an embedded `0Harmony.dll` and loaded from
-there at runtime — see `Patch/HarmonyLoader.cs` — so every copy of the plugin is also a copy of
-Harmony.
+there at runtime (`Patch/HarmonyLoader.cs`), so every copy of the plugin is a copy of Harmony.
 
 * Author: Andreas Pardeike
 * Project: <https://github.com/pardeike/Harmony>
 * License: MIT
 
-**The version is deliberately not repeated here.** It is pinned in the `Lib.Harmony`
-`PackageReference` in `src/EmbyProxyRouter/EmbyProxyRouter.csproj`, and Dependabot bumps it on a
-schedule — a number written down a second time would be wrong from the first bump onwards, in a pull
-request nobody would think to check a licence file against. Nothing about the notice depends on it:
-the copyright holder and the licence text below are the same for every version, which is all MIT
-asks to be carried along.
+The version lives in the `Lib.Harmony` `PackageReference` in
+`src/EmbyProxyRouter/EmbyProxyRouter.csproj` and is not repeated here: Dependabot bumps it on a
+schedule, and a second copy would go stale in a pull request nobody opens a licence file for. The
+notice does not depend on it — the copyright holder and the text below hold for every version.
 
 ```
 MIT License
