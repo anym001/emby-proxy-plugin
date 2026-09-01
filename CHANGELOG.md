@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.2](https://github.com/anym001/emby-proxy-plugin/compare/v1.1.1...v1.1.2) (2026-09-01)
+
+
+### Bug Fixes
+
+* carry Harmony's MIT notice in the DLL, and prepare the catalog submission ([abee08a](https://github.com/anym001/emby-proxy-plugin/commit/abee08ac2b94c66d359f5c1b18e9aa65a924ff75))
+* carry Harmony's MIT notice inside the plugin DLL ([534dfa1](https://github.com/anym001/emby-proxy-plugin/commit/534dfa1808f4c499b1a8f2c78248728249e377eb))
+* give release-please a token that can actually trigger release.yml ([9026e08](https://github.com/anym001/emby-proxy-plugin/commit/9026e081de665d1aee838b6f98a2da43c6fabb7b))
+* let workflow_dispatch name an existing tag to recover ([3eca80b](https://github.com/anym001/emby-proxy-plugin/commit/3eca80b51888d2a48006d89cdf340a1f1e22e349))
+
 ## [1.1.1](https://github.com/anym001/emby-proxy-plugin/compare/v1.1.0...v1.1.1) (2026-08-09)
 
 
