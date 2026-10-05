@@ -106,6 +106,9 @@ Each is load-bearing and was established by decompiling Emby 4.9.5.0 or by runti
   output a pull request would have rejected.
 * The pinned Emby version lives in `build/emby-version.txt` and nowhere else — do not reintroduce a
   literal default alongside it. It and `build/emby-sha256.txt` are **one pin**: change them together.
+* **That pin is the oldest supported server, not the newest.** Do not raise it to "adopt" a new Emby
+  release — a DLL built against a newer Emby fails to load on older servers. `ARCHITECTURE.md`,
+  "Which Emby version the plugin is built against", has the evidence.
 
 ## Testing rules
 
