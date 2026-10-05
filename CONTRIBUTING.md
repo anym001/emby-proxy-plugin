@@ -67,6 +67,11 @@ without a checksum that matches, so bumping one alone leaves a pin nobody can bu
 than the pinned one has no checksum by design; the script says so and continues, which is what a run
 checking a *new* Emby release needs. Nothing built that way is ever published.
 
+**The pinned Emby version is the minimum, not the newest.** A DLL built against a newer Emby does not
+load on an older one, so moving the pin drops support for every older server. A new Emby release is
+checked without moving it (`release-check.yml`). Raise it only on purpose — when the plugin needs a
+newer API — and update the requirement in the README in the same change.
+
 **The plugin's own version lives in the csproj, and the release tag has to match it — but you do not
 bump it.** `release-please.yml` reads the Conventional Commits on `main` and maintains a standing
 pull request that bumps `<Version>` in `src/EmbyProxyRouter/EmbyProxyRouter.csproj` and

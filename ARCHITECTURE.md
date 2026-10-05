@@ -356,7 +356,8 @@ only what is needed from the official release: four assemblies the plugin compil
 keeping it allows the patch target to be verified without a second 180 MB download.
 
 The version is pinned in `build/emby-version.txt` — one file, read by both the fetch script and CI.
-For a different Emby version:
+It is the **oldest** Emby Server the plugin supports, not the newest (see below). For a different Emby
+version:
 
 ```bash
 FORCE=1 ./build/fetch-emby-refs.sh 4.9.6.0
@@ -372,8 +373,8 @@ assemblies inside it, and `verify-patch-target.sh` reads its patch target out of
 Be precise about what this does and does not buy. HTTPS authenticates the host; it says nothing
 about the artefact still being the one this repository was verified against. The checksum closes
 that second gap and nothing else — it is tamper-evidence for later fetches, not authentication of
-the upstream release. The value is first recorded at the moment a version is adopted, and it lands
-in a pull request a human merges, which is where trusting it is actually decided.
+the upstream release. The value is recorded when the minimum is raised, and it lands in a pull
+request a human merges, which is where trusting it is actually decided.
 
 Only the pinned version can be checked, because only it has an entry. `ci.yml` dispatches the script
 against *newer* Emby releases to see whether they still work, and those have no checksum by
@@ -382,8 +383,40 @@ publishes. `release.yml` takes no version input at all, so a release always goes
 verified path.
 
 **The two files are one pin.** Bumping the version without the checksum leaves a pin that cannot be
-built — the script fails rather than extracting something unverified. The bump pull request `ci.yml`
-opens writes both.
+built — the script fails rather than extracting something unverified. Raising the minimum changes
+both in the same commit.
+
+### Which Emby version the plugin is built against
+
+The plugin is compiled against the oldest server it supports, and that one DLL runs on every newer
+one. The direction matters because of how the references bind. The compiled DLL asks for
+`MediaBrowser.Controller`, `MediaBrowser.Common`, `MediaBrowser.Model` and `Emby.Web.GenericEdit` at
+the exact assembly version it was built against. Emby loads a plugin with `Assembly.Load(bytes)` into
+the default load context and registers no resolver, so .NET binds each request to the assembly the
+server already has: a request for an equal or lower version binds, a request for a higher one fails.
+
+Checked against 4.9.5.0 and 4.10.1.0 by loading the plugin the way Emby does and binding every type
+and method:
+
+| Built against | Runs on 4.9.5.0 | Runs on 4.10.1.0 |
+| --- | --- | --- |
+| 4.9.5.0 | yes | yes |
+| 4.10.1.0 | no — `Could not load file or assembly 'MediaBrowser.Controller, Version=4.10.1.0'` | yes |
+
+So `build/emby-version.txt` is the minimum, and moving it to a newer Emby release drops every server
+older than that release. Newer releases are verified *without* moving it: `release-check.yml`
+dispatches `ci.yml` against them, which re-runs the patch-target check and compiles and tests the
+plugin against that release's assemblies (see "`release-check.yml`" below). Compiling against the
+newer assemblies stands in for checking that the members the DLL calls still exist there. It does not
+catch a change that is source-compatible but not binary-compatible, such as a new optional parameter
+on a method the plugin calls; the plugin calls few Emby APIs, which keeps that gap small.
+
+The minimum is raised only deliberately: when the plugin needs an API a newer Emby introduced, or when
+support for an old line ends. The catalog's `requiredVersionStr` follows it (`build/catalog-entry.sh`),
+and so does the version the README names as the requirement.
+
+Building against an older SDK than the servers it runs on is also how Emby's own plugin template
+works — the wiki's sample project references `mediabrowser.server.core` 4.8.0.80.
 
 ### Verifying the patch target
 
@@ -510,10 +543,10 @@ every ordinary change sitting between two releases instead of catching a mistake
 
 ### `release.yml` — tags matching `v*`, or a published release
 
-The only workflow that produces something a user installs. It builds against the pinned Emby version
-— deliberately with no override input, because the DLL is handed to users and the version it was
-verified against has to be the one the repository claims to support — and attaches
-`EmbyProxyRouter.dll` to a GitHub Release.
+The only workflow that produces something a user installs. It builds against the minimum Emby
+version in `build/emby-version.txt` — deliberately with no override input, because the DLL is handed
+to users, and a DLL built against anything newer would not load on the older servers the repository
+claims to support — and attaches `EmbyProxyRouter.dll` to a GitHub Release.
 
 It repeats CI's verification instead of trusting that a pull request ran it. A tag can be placed on
 any commit, including one that never went through a pull request, and shipping a plugin whose Harmony
@@ -550,27 +583,26 @@ DLL is uploaded to it instead of the run failing.
 ### `release-check.yml` — manual, weekly schedule prepared
 
 Answers the question a pull request cannot: *does a newer Emby Server release break the plugin?* It
-reads the Emby release list, compares the newest release against the pinned version, and — if a newer
-one exists — dispatches `ci.yml` against it. That run fetches that version's assemblies, re-runs the
+reads the Emby release list, compares the newest release against the minimum in
+`build/emby-version.txt`, and — if a newer one exists — dispatches `ci.yml` against it. That run fetches that version's assemblies, re-runs the
 patch-target check, and leaves a candidate DLL as an artifact.
 
 `ci.yml` reports that run's outcome itself, in a `report-candidate` job that only exists when the
 workflow was dispatched with an `emby-version` input — a plain pull-request run never touches it. On a
-pass it opens a pull request that bumps `build/emby-version.txt` to the candidate version; on a
-failure it opens an issue. Neither creates a tag or a release — adopting a version stays the human
-step described in `release.yml` above, this only turns "green means adoptable" into something that
-doesn't require reading the Actions log to find out. Both checks skip quietly (already pinned to that
-version, or a branch/issue for it already exists) so a check dispatched daily from a cron doesn't pile
-up duplicates while a version stays unadopted or broken.
+pass it writes the result to the run summary and changes nothing: releases build against the minimum
+and therefore already run on the newer version. On a failure it opens an issue, unless an open one
+for that version already exists, so a check dispatched daily from a cron doesn't pile up duplicates
+while a version stays broken. Because a pass changes nothing, every later check re-verifies the same
+newest release until a newer one appears.
 
 The two lines Emby publishes in parallel (stable `4.9.x` and beta `4.10.0.x`) are separated by the
 `prerelease` flag rather than by version order, because taking the newest tag would silently track
 betas. The flags found are printed to the job summary, so the decision is visible rather than assumed.
 Betas can be checked deliberately with the `include-prerelease` input.
 
-A green run means the version can be adopted by bumping `build/emby-version.txt`. A red one means the
-plugin needs attention before it can claim to support that version — which is exactly the failure
-that goes unnoticed otherwise, because a non-matching Harmony patch fails silently rather than loudly.
+A green run means the current releases support that version. A red one means the plugin needs
+attention before it can claim to support it — which is exactly the failure that goes unnoticed
+otherwise, because a non-matching Harmony patch fails silently rather than loudly.
 
 Both this and `ci.yml` are `workflow_dispatch`; GitHub only offers the *Run workflow* button for
 workflows present on the default branch. `release-check.yml` has a weekly `schedule` prepared but

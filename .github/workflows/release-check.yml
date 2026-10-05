@@ -1,7 +1,7 @@
 name: Check Emby Releases
 
-# Finds Emby Server releases newer than the version this repository is pinned to
-# and dispatches ci.yml against them. That run re-verifies the patch target,
+# Finds Emby Server releases newer than the minimum this repository builds
+# against (build/emby-version.txt) and dispatches ci.yml against them. That run re-verifies the patch target,
 # which is the thing a new Emby version can actually break, and - because it is
 # a manual dispatch rather than a pull request - leaves a candidate DLL as an
 # artifact to try against the new server.
@@ -139,11 +139,11 @@ jobs:
             echo
             echo "### Result"
             echo
-            echo "Emby **$BUILD_VERSION** is newer than the pinned **$PINNED_VERSION**."
+            echo "Emby **$BUILD_VERSION** is newer than the minimum **$PINNED_VERSION**."
             echo "A CI run against it has been started - it re-verifies the patch target."
             echo
-            echo "If that run is green, bump \`build/emby-version.txt\` to adopt the version."
-            echo "If it fails, the plugin needs attention before it can claim to support it."
+            echo "If that run is green, releases already work on it - nothing to change."
+            echo "If it fails, it opens an issue: the plugin needs attention for that version."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report that nothing is pending
@@ -156,6 +156,6 @@ jobs:
             echo
             echo "### Result"
             echo
-            echo "Nothing to do - the pinned **$PINNED_VERSION** is current"
+            echo "Nothing to do - the minimum **$PINNED_VERSION** is the newest release"
             echo "(newest considered release: **$LATEST_VERSION**)."
           } >> "$GITHUB_STEP_SUMMARY"

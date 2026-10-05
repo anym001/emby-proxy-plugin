@@ -35,6 +35,9 @@ This is intentional — the point of the project is a single, auditable responsi
 
 ## Installation
 
+Requires **Emby Server 4.9.5.0 or newer**. New Emby releases are checked against the plugin; one
+that breaks it gets an open issue in this repository.
+
 The Emby container usually maps a host directory to `/config`. Copy the plugin DLL into its
 `plugins` subfolder and restart the container.
 

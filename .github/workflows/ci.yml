@@ -247,8 +247,8 @@ jobs:
 
   # release-check.yml dispatches this workflow with a candidate Emby version;
   # a human typing one into "Run workflow" does the same. Either way the run
-  # exists to decide whether that version can be adopted, so surface the
-  # decision instead of leaving it sitting in an Actions log that only the
+  # exists to decide whether the plugin still works on that version, so surface
+  # the answer instead of leaving it sitting in an Actions log that only the
   # person who happened to dispatch it will ever open.
   report-candidate:
     needs: verify
@@ -257,78 +257,33 @@ jobs:
     # Elevated beyond the workflow's default contents:read - safe only because
     # this job never runs on pull_request, so a fork can never reach it.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
       issues: write
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Adopting a version is still a human decision - release.yml deliberately
-      # takes no version input, for the reason explained there - so this
-      # proposes the bump rather than merging it. Skips quietly if the version
-      # is already pinned or a branch for it already exists, so a check
-      # repeated daily from a cron doesn't pile up duplicate PRs.
-      - name: Propose adopting the version
+      # Nothing to adopt on a pass: release.yml builds against
+      # build/emby-version.txt, the oldest supported server, and a plugin built
+      # against an older Emby loads on a newer one but not the other way round.
+      # Raising that minimum is a separate, deliberate change - see
+      # ARCHITECTURE.md, "Which Emby version the plugin is built against".
+      - name: Record that the version is compatible
         if: needs.verify.result == 'success'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.emby-version }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          set -euo pipefail
-          pinned="$(tr -d '[:space:]' < build/emby-version.txt)"
-          if [ "$pinned" = "$VERSION" ]; then
-            echo "Already pinned to $VERSION - nothing to propose."
-            exit 0
-          fi
+          {
+            echo "### Emby $VERSION is compatible"
+            echo
+            echo "The patch target matches and the plugin builds and passes its tests against it."
+            echo "Releases keep building against the minimum in \`build/emby-version.txt\`,"
+            echo "so they run on this version without any change here."
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          branch="bump-emby-$VERSION"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            echo "Branch $branch already exists - a proposal is presumably already open."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          printf '%s' "$VERSION" > build/emby-version.txt
-
-          # The pin is two files: the version and the checksum of the package that
-          # version resolves to. fetch-emby-refs.sh refuses to extract the pinned
-          # version without a matching entry, so bumping one without the other
-          # would land a pin that cannot be built.
-          #
-          # Streamed rather than saved - only the digest is wanted, and this job
-          # has no other use for 180 MB. Recording it here does not authenticate
-          # the upstream release; it fixes which artefact this repository was
-          # verified against, so every later fetch is checked against that one.
-          # The value lands in a pull request a human merges, which is where the
-          # decision to trust it is actually made.
-          package="emby-server-deb_${VERSION}_amd64.deb"
-          sum="$(curl -fsSL --retry 3 --retry-delay 2 \
-                   "https://github.com/MediaBrowser/Emby.Releases/releases/download/${VERSION}/${package}" \
-                 | sha256sum | cut -d' ' -f1)"
-          printf '%s  %s\n' "$sum" "$package" > build/emby-sha256.txt
-
-          git commit -am "build: adopt Emby Server $VERSION"
-          git push origin "$branch"
-
-          gh pr create \
-            --title "build: adopt Emby Server $VERSION" \
-            --body "$(cat <<EOF
-          \`ci.yml\` verified the patch target against Emby Server **$VERSION** and passed: $RUN_URL
-
-          Merging this bumps \`build/emby-version.txt\`, which is what \`release.yml\` builds
-          the next tag against, and records the package checksum in
-          \`build/emby-sha256.txt\` so later fetches of that version are verified
-          against the artefact this run used.
-          EOF
-          )"
-
-      # Same idea as the PR above, keyed on an open issue with this version in
-      # its title instead of a branch, so a daily cron doesn't pile up
-      # duplicate issues for a version that's still broken.
+      # Keyed on an open issue with this version in its title, so a check
+      # repeated from a cron doesn't pile up duplicate issues for a version
+      # that's still broken.
       - name: Report that the version is incompatible
         if: needs.verify.result == 'failure'
         env:
