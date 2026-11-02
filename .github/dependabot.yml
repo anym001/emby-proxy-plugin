@@ -51,5 +51,9 @@ updates:
       test-tooling:
         patterns:
           - "*"
+    # The test project references the plugin project, so Dependabot sees
+    # Lib.Harmony here too. It is updated only through the entry above, on its own.
+    ignore:
+      - dependency-name: "Lib.Harmony"
     commit-message:
       prefix: test
